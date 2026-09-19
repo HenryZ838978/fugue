@@ -1,172 +1,185 @@
-# Fugue — graft YuE2's score-reading onto MiniMax-Music3's acoustics
+# Fugue
 
-**Cover any song into any style, with MiniMax-Music3 sound quality, from a score.**
+**High-fidelity music covers, in the style you choose.**
 
-Fugue is a *grafting* recipe: a frozen symbolic planner (YuE2-3B, which actually reads ABC notation) drives a frozen
-high-fidelity acoustic renderer (MiniMax-Music3's DiT + Flow-VAE vocoder) through a 66M-parameter latent adapter trained
-on 191 hours of self-generated pairs with **zero human labels**.
+Fugue turns a recording or an ABC score into a new arrangement while keeping the song recognizable. It combines YuE2's score-conditioned generation with MiniMax-Music3's acoustic renderer through a learned adapter. Both base models stay frozen.
 
-```
-song.flac ─SheetSage2─▶ ABC score ─┐
-target style tags ─────────────────┼─▶ YuE2-3B (AR → NAR flow-matching) ─▶ 64-d latent @ 25 Hz
-lyrics (optional) ─────────────────┘                                              │
-                                                              Fugue adapter (66M) │  ← the only trained part
-                                                                                  ▼
-                              MiniMax-Music3 DiT (2.4B, frozen) ─▶ Flow-VAE vocoder (frozen) ─▶ 44.1 kHz stereo
-```
+## Listen first
 
-- **Cover ability that MiniMax-Music3 does not have.** MM3 cannot take a score at all; four rounds of LoRA / in-stream /
-  prefix experiments trying to teach its 8B LM to read ABC all measured ≈0 conditional effect. YuE2 reads scores natively.
-- **Audio quality that YuE2 does not have.** YuE2's VAE output is nearly empty above 12 kHz and 4–7 dB narrower in stereo
-  than a record; the same latent rendered through MM3's DiT comes back with the high band and width of a master.
-- **Identity survives the graft.** On 209 real recordings covered into two styles each, Discogs-VINet retrieves the
-  source song at Hit@1 0.524 for Fugue vs 0.557 for YuE2's own decode (MRR 0.609 vs 0.646); 239 of 418
-  pairs get the *identical* rank, and a no-score control sits at 0.000. Re-transcribing the output recovers the input
-  score equally well either way (DTW 0.523 vs 0.470).
+Start with one song in two settings. These are covers of **s-AVE**, by SawanoHiroyuki[nZk] with Aimer:
 
-Listen: [`samples/`](samples/) has A/B pairs — the *same* YuE2 latent decoded by YuE2's VAE vs. by Fugue.
-
-## Results
-
-### Identity is preserved, quality goes up (ood216 cover benchmark)
-
-209 real recordings (a Japanese/Chinese pop & OST catalogue), each transcribed with SheetSage2 and covered into two
-contrasting target styles from a bank of six, first 60 s, one seed. Every YuE2 latent is decoded both ways, so the two
-rows are the *same music* through two renderers. Identity = Discogs-VINet retrieval of the source among the 209 originals
-(protocol mirrors the SHS100K zero-shot cover evaluation on the YuE2 model card, at 1/50 the database size).
-
-| arm | n | Hit@1 ↑ | Hit@10 ↑ | MRR ↑ | energy >8 kHz | >12 kHz | 99 % rolloff | side/mid | re-transcription DTW ↓ |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| full-score · YuE2-Vae decode | 418 | 0.557 | 0.809 | 0.646 | 0.5 % | 0.1 % | 13.8 kHz | -10.9 dB | 0.470 |
-| full-score · **Fugue** | 418 | 0.524 | 0.775 | 0.609 | **1.0 %** | **0.2 %** | **17.6 kHz** | **-4.8 dB** | 0.523 |
-| no-score control · YuE2-Vae | 210 | 0.000 | 0.033 | 0.022 | | | | | 1.686 |
-| no-score control · Fugue | 210 | 0.000 | 0.033 | 0.022 | | | | | 1.622 |
-| *upper bound: the original's own 60 s excerpt* | 210 | 0.819 | 0.933 | 0.861 | | | | | |
-
-Paired over the 418 shared latents: 239 pairs retrieve at the identical rank, 63 rank higher through Fugue,
-116 through YuE2-Vae; the Hit@1 gap is -0.033 (bootstrap 95 % CI [-0.060, -0.010]). Spectral metrics flip in Fugue's favour
-on 99.3 % of pairs (energy >12 kHz doubles, 99 % rolloff +3.8 kHz, stereo width +6.1 dB — back to record
-level); CLAP style-adherence and score-following DTW are tied (median paired difference -0.019 and +0.000).
-Reading: the 64-d latent carries the song; the adapter is a lossy map (R² 0.67) with finite capacity, and the residual
-costs ~3 % of retrieval rank in edge cases — for a *style-transfer* system that is inside what a different seed
-does, in either direction. The audio difference is not subtle. (One song of 210 has a 48k-token score that exceeds YuE2's context and is excluded.)
-
-### What the adapter learns
-
-| | R²(var-weighted) on held-out songs |
-|---|---:|
-| ridge regression, ±8-frame context (linear ceiling) | 0.384 |
-| MM3's own DAV latent as input, same ridge | 0.20 |
-| Fugue adapter v2 (8L d768, standardized MSE) | 0.665 |
-| Fugue adapter v3 (+ variance-weighted loss) | 0.672 |
-| **Fugue adapter v4 (+ input-noise augmentation 0.15) — released** | 0.671 |
-
-v4 is released because it is best where it matters: covers of *real* songs (the most out-of-distribution input) follow the
-score better (re-transcription DTW 0.369 vs 0.434 for v3), and its grafted reconstruction of an MM3 song is closest to the
-change-the-seed noise floor (log-mel L1 0.740 vs 0.69).
-
-### How robust is the DiT to condition error?
-
-Adding white noise with 30 % of the per-channel variance to the DiT condition moves the output's log-mel distance to the
-original by only +0.04 (seed-to-seed floor 0.70). The DiT fills in acoustic detail itself; the adapter does not have to
-be perfect. Zeroing the condition (pure DiT prior) gives 2.28; swapping in another song's condition gives 5.08.
-
-## Install
-
-You need the three upstream model families (all open weights) plus the Fugue adapter:
-
-| what | where | size |
+| Source | Piano and strings | Britpop guitar rock |
 |---|---|---|
-| MiniMax-Music3 (transformer, vocoder, condition_encoder, scheduler) | `MiniMaxAI/MiniMax-Music3` | 2.4B DiT + vocoder |
-| YuE2-3B + YuE2-Vae (+ the `yue2-infer` wheel shipped in the repo) | `m-a-p/YuE2-3B`, `m-a-p/YuE2-Vae` | 3B |
-| SheetSage2 + MERT-v2-FullSong (transcription; skip if you bring ABC) | `m-a-p/SheetSage2`, `m-a-p/MERT-v2-FullSong` | |
-| **Fugue adapter v4** | `HenryZ838978/fugue-scion-v4` | 66M (266 MB fp32) |
+| [Original excerpt](samples/source_sAVE_excerpt.mp3) | [Fugue cover](samples/cover_sAVE_piano_fugue.mp3) | [Fugue cover](samples/cover_sAVE_britpop_fugue.mp3) |
+
+The piano prompt is `intimate solo piano ballad with soft strings, 75 BPM, A minor, cinematic, instrumental`; the guitar prompt is `1990s Britpop guitar rock, 75 BPM, A minor, driving drums, instrumental`.
+
+For a longer listen: [the full 4:37 piano cover](samples/cover_sAVE_piano_full_fugue.mp3). For a vocal example: [To Know You, with supplied lyrics](samples/cover_toKnowYou_britpop_vocal_fugue.mp3).
+
+To hear the contribution of the renderer, compare **the same YuE2 latent** decoded both ways:
+
+| Arrangement | YuE2 native | Fugue |
+|---|---|---|
+| s-AVE, piano and strings | [Listen](samples/cover_sAVE_piano_yue2_native.mp3) | [Listen](samples/cover_sAVE_piano_fugue.mp3) |
+| s-AVE, Britpop | [Listen](samples/cover_sAVE_britpop_yue2_native.mp3) | [Listen](samples/cover_sAVE_britpop_fugue.mp3) |
+| To Know You, Britpop with vocals | [Listen](samples/cover_toKnowYou_britpop_vocal_yue2_native.mp3) | [Listen](samples/cover_toKnowYou_britpop_vocal_fugue.mp3) |
+
+These are MP3 previews, not lossless evaluation audio. [Sample details and additional pairs](samples/README.md).
+
+### Why "Fugue"?
+
+In a musical fugue, a recognizable subject returns through interweaving voices. The name expresses what we want from a cover: continuity in a vocal or instrumental melody, with room for the other parts to change and respond. The score gives the new arrangement something specific to remain faithful to.
+
+Full-score conditioning keeps the supplied harmonic context, while the melody-only option removes chord annotations. Both generate a new mixed recording.
+
+![Fugue cover workflow: a recording or score and a target style drive YuE2, a small adapter, and the frozen MiniMax-Music3 renderer.](paper/figures/cover-workflow.png)
+
+## Run a cover
+
+The reference deployment fits on **one 24 GB GPU**. On an RTX 4090 with resident services, a 30-second cover takes about 50 seconds end to end. The full 4:37 example took about 3.3 minutes across AR generation, NAR synthesis, and acoustic rendering.
+
+### Install
+
+From the repository root, install the package and the inference wheel supplied with YuE2:
 
 ```bash
-pip install -e .            # torch, diffusers>=0.40 (MiniMax-Music3 support), transformers, safetensors, soundfile, librosa
+pip install -e .
 pip install /path/to/YuE2-3B/yue2_infer-0.1.5-py3-none-any.whl
 ```
 
-Everything fits on one 24 GB GPU in bf16 (YuE2 ≈7 GB, MM3 acoustic side ≈5 GB, SheetSage2 ≈2.5 GB).
+The reference services use separate `graphtokenizer` and `mm3` environments for YuE2 and the MM3 Diffusers stack. The minimal package also provides a single-process CLI. Download the following model snapshots before running; the inference wrappers use local/offline loading.
 
-## Use
+| Component | Model repository | Used for |
+|---|---|---|
+| YuE2-3B and YuE2-Vae | `m-a-p/YuE2-3B`, `m-a-p/YuE2-Vae` | Score-conditioned AR/NAR generation; optional native A/B decode |
+| MiniMax-Music3 | `MiniMaxAI/MiniMax-Music3` | `transformer`, `vocoder`, `condition_encoder`, and `scheduler` |
+| SheetSage2 and MERT | `m-a-p/SheetSage2`, `m-a-p/MERT-v2-FullSong` | Transcription; skip these when supplying ABC |
+| Fugue adapter v4 | `HenryZ838978/fugue-scion-v4` | 66.6M parameters; weights, normalization statistics, and config |
+
+Set paths to your downloaded snapshots:
 
 ```bash
-export FUGUE_MM3=/models/MiniMax-Music3 FUGUE_YUE2=/models/YuE2-3B FUGUE_YUE2_VAE=/models/YuE2-Vae \
-       FUGUE_SHEETSAGE2=/models/SheetSage2 FUGUE_MERT=/models/MERT-v2-FullSong FUGUE_ADAPTER=HenryZ838978/fugue-scion-v4
+export FUGUE_MM3=/models/MiniMax-Music3
+export FUGUE_YUE2=/models/YuE2-3B
+export FUGUE_YUE2_VAE=/models/YuE2-Vae
+export FUGUE_SHEETSAGE2=/models/SheetSage2
+export FUGUE_MERT=/models/MERT-v2-FullSong
+export FUGUE_ADAPTER=/models/fugue-scion-v4
 
-# cover a recording into a new style (instrumental)
-python -m fugue.cover --audio song.flac --style "intimate solo piano ballad with soft strings, cinematic" --native
+# Start with a recording. Also write the native YuE2 decode for comparison.
+python -m fugue.cover --audio song.flac \
+  --style "intimate solo piano ballad with soft strings, cinematic" --native
 
-# bring your own ABC, add lyrics
-python -m fugue.cover --abc score.abc --style "1990s Britpop guitar rock, driving drums" --lyrics lyrics.txt
+# Or supply a score and lyrics.
+python -m fugue.cover --abc score.abc \
+  --style "1990s Britpop guitar rock, driving drums" --lyrics lyrics.txt
 ```
 
-`--native` also writes YuE2's own VAE decode next to the Fugue output so you can A/B the same latent.
+`--seconds 30` limits the generated excerpt; the default requests a full-length generation, subject to YuE2's context and token limits. Outputs, the input ABC, and timing metadata are written to `fugue_out/`.
 
-**Style prompt** — same conventions as YuE2: English, comma-separated free tags, roughly *genre/era, instruments, mood,
-BPM, key, meter*. e.g. `1990s Britpop guitar rock, 106 BPM, A minor, driving drums, deliriously euphoric`. BPM/key are
-taken from the transcribed score when not given. **Lyrics** — section tags `[Intro] [Verse] [Chorus] [Bridge] [Outro]`,
-one line per sung line; omit for instrumental.
+### Controls
 
-As a library:
+| Input | Behavior |
+|---|---|
+| `--audio` or `--abc` | Transcribe a recording, or use an existing ABC score |
+| `--style` | English tags describing genre, instrumentation, mood, and optionally tempo/key |
+| `--lyrics` | A text file or text with section tags such as `[Verse]` and `[Chorus]`; omitted means instrumental |
+| `--cot full` | Use the supplied score, including chord annotations; default |
+| `--cot melody` | Remove quoted chord annotations before generation; does not select or lock an individual voice |
+| `--seed`, `--dit_seed` | Set YuE2 generation and acoustic-rendering seeds separately |
+| `--native` | Save YuE2's own decode of the generated latent alongside Fugue |
+
+The score and prompt should agree on tempo and key. The CLI only inserts a prompt BPM when the ABC has no `Q:` line; it does not transpose the score to match a key mentioned in the prompt.
+
+### Arena and services
+
+`services/fugue_arena.py` provides an upload-and-style interface with original, YuE2-native, and Fugue players. It uses the resident YuE2/transcription and adapter/rendering services, which can share a GPU. The reference setup occupied approximately 9.8 GB and 4.9 GB respectively. Launch commands are in [`research/scripts/`](research/scripts/); service and model paths must match your installation.
+
+## What the results show
+
+We evaluate **209 real songs, two target styles per song, and 418 shared latents**, each decoded by YuE2 and Fugue. The six styles are piano ballad, Britpop, jazz trio, synthwave, acoustic folk, and orchestral score. Source-song retrieval uses a **210-recording gallery**. A style-only control omits the source score.
+
+![Source-song retrieval and target-style similarity for score-conditioned covers and style-only controls.](paper/figures/identity-and-style.png)
+
+The style-only control scores higher on CLAP but loses source-song identity. That is why cover generation needs both measurements: following a style prompt is useful only if the result still refers to the intended song.
+
+| Decoder and input | Outputs | Source Hit@1 | Source MRR | CLAP style, median |
+|---|---:|---:|---:|---:|
+| YuE2 native, source score | 418 | 0.557 | 0.646 | 0.319 |
+| **Fugue, source score** | **418** | **0.524** | **0.609** | **0.304** |
+| YuE2 native, style only | 210 | 0.000 | 0.022 | 0.436 |
+| Fugue, style only | 210 | 0.000 | 0.022 | 0.418 |
+
+Fugue retains 94% of the native decoder's MRR. The paired Hit@1 difference is -3.35 percentage points; 239 pairs retrieve the source at the same rank. These compare renderers on the same generated latents, not independently sampled songs.
+
+### Acoustic rendering
+
+The author preferred Fugue in the development listening comparisons. The measurements below describe the associated spectral and stereo changes; the A/B samples above let listeners judge the audible result.
+
+![Paired acoustic measurements for 418 latents: high-frequency energy, spectral rolloff, and stereo side-to-mid power.](paper/figures/acoustic-changes.png)
+
+| Measurement, median over 418 outputs | YuE2 native | Fugue |
+|---|---:|---:|
+| Energy above 8 kHz | 0.466% | 0.966% |
+| Energy above 12 kHz | 0.070% | 0.209% |
+| 99% spectral rolloff | 13.8 kHz | 17.6 kHz |
+| Stereo side/mid power | -10.9 dB | -4.8 dB |
+
+High-frequency energy increases in 99.3% of pairs for each band, rolloff in 100%, and side/mid power in 96.9%. All four increase together in **400/418 pairs (95.7%)**.
+
+Re-transcription interval-DTW has a median paired difference of 0.000 across **372 valid pairs**. The separate arm medians are 0.470 for YuE2 native and 0.523 for Fugue, with 372 and 375 valid outputs respectively. Audiobox-Aesthetics PQ moves in the opposite direction to the author's listening preference, with a median paired change of -0.278; the paper reports both observations.
+
+[Full protocol and paper](paper/fugue.md) · [Summary data](research/eval_summary.json) · [Per-output measurements](research/eval_per_item.json)
+
+## How the graft is trained
+
+**No additional original/cover training pairs are needed.** The adapter learns from MM3's own generated audio and stored codes, not from demonstrations of one song being rearranged into another style.
+
+![Training pairs are built from the audio and stored codes of one MM3 generation; inference replaces the VAE encoder with YuE2's score-conditioned generator.](paper/figures/training-pairs.png)
+
+1. Encode MM3-generated audio with the public YuE2 VAE encoder to obtain 64-dimensional latents at 25 Hz.
+2. Teacher-force the stored RVQ codes, caption, and lyrics through MM3 to recover its 2048-dimensional pre-upsampling DiT condition.
+3. Train the adapter to map one to the other, correcting the stitched audio time axis and normalizing each channel.
+4. At inference, use the latents generated by YuE2's score-conditioned AR/NAR path instead of encoded training audio.
+
+The full paired corpus contains 12,837 generations, about 191 hours; the adapter uses 10,340 training songs. The released v4 adapter trained for 67 minutes on one RTX 4090 **after pair extraction**, with both upstream models frozen. Corpus generation and feature extraction are separate costs. Its held-out variance-weighted R² is 0.671.
+
+The practical result is an additional route into a pretrained renderer: new score-conditioned behavior without retraining either base model. The [paper's discussion](paper/fugue.md#5-discussion-control-after-pretraining) places this alongside activation steering, low-rank adaptation, and inference orchestration, while separating those broader directions from the evaluated graft.
+
+### Python interface
 
 ```python
 from fugue import FugueAdapter, Rootstock
 from fugue.scion import Scion
 
-scion = Scion("m-a-p/YuE2-3B", "m-a-p/YuE2-Vae")
-latent, info = scion.generate(style="smooth jazz trio, Rhodes piano", abc=open("score.abc").read())   # (T, 64) @ 25 Hz
-adapter = FugueAdapter("HenryZ838978/fugue-scion-v4")
-root = Rootstock("MiniMaxAI/MiniMax-Music3")
-wav = root(adapter(latent), steps=30, seed=7)                                                         # (2, S) @ 44.1 kHz
+scion = Scion("/models/YuE2-3B", "/models/YuE2-Vae")
+latent, info = scion.generate(
+    style="smooth jazz trio, Rhodes piano",
+    abc=open("score.abc").read(),
+)
+adapter = FugueAdapter("/models/fugue-scion-v4")
+renderer = Rootstock("/models/MiniMax-Music3")
+wav = renderer(adapter(latent), steps=30, seed=7)  # (2, samples), 44.1 kHz
 ```
 
-### Services + Arena
+## Scope
 
-`services/` has the two resident HTTP services we run (`fugue_yue2_service.py` on the graphtokenizer env, `fugue_graft_service.py`
-on the diffusers env — they can share one GPU), a CLI that orchestrates them, and `fugue_arena.py`, a Gradio page that
-takes an upload + style and shows original / YuE2-native / Fugue side by side. A 30 s cover takes ≈50 s end to end on a
-4090 (transcribe 5 s, YuE2 AR 14 s + NAR 4 s, DiT + vocoder 22 s); a 4:37 song takes ≈3.3 min.
+The main benchmark is instrumental, uses 60-second generations and one YuE2 seed, and draws on a Japanese/Chinese pop and soundtrack catalogue. Vocal examples and one full-length output are included, but lyric intelligibility and long-form consistency have not been systematically evaluated. The model regenerates a mixed recording rather than copying a selected stem; timbre can shift toward MM3's rendering preferences.
 
-## How it works (short)
+## Repository
 
-MM3's DiT is conditioned on one 2048-d vector per 25 Hz frame produced by a tiny `ConditionEncoder`: a softmax mix of the
-LM hidden state and seven RVQ-depth hidden states (90.6 % of the weight is on the LM), scaled by 0.0685, projected by a
-k=3 conv, and nearest-upsampled ×3.445 to the 86 Hz latent rate. That is a low-amplitude, 25 Hz-bandwidth "route map";
-the DiT fills in everything acoustic. Fugue replaces the map's *source* — the LM — with YuE2's latent, and leaves the DiT
-and vocoder untouched.
+| Directory | Contents |
+|---|---|
+| `fugue/` | Minimal inference package |
+| `services/` | Resident services, orchestration CLI, and Gradio arena |
+| `samples/` | Source excerpt, cover previews, same-latent comparisons, and a full-length example |
+| `paper/` | Paper draft and shared SVG/PNG figures, including their regeneration script |
+| `research/` | Training, probes, evaluation data, launchers, and the historical lab notebook |
 
-Training pairs come for free: for 12,837 songs MM3 generated itself (with their RVQ codes), we teacher-force the codes
-back through MM3's LM + depth decoder to recover the exact condition the DiT saw, and encode the rendered audio with
-YuE2's (open) VAE encoder. The adapter regresses one onto the other. Two details matter: (1) MM3's audio is stitched from
-200-frame windows on a 345-latent hop, so its time axis drifts 0.136 YuE2 frames per window — aligning for that raised
-the linear probe from 0.26 to 0.35; (2) loss is a per-channel z-scored MSE with a variance-weighted term, because the
-condition channels span a 35× range of scale and the DiT sees the raw scale.
-
-Full lab notebook: [`research/SCION.md`](research/SCION.md). Paper draft: [`paper/fugue.md`](paper/fugue.md).
-
-### Arena (for the demo video)
-
-`services/fugue_arena.py` is the page in the recording: upload a song, pick a style preset or type one, optionally paste
-lyrics, press *generate* — three players come back: original / YuE2 native / Fugue, plus the ABC that SheetSage2 read and a
-timing log. Presets: piano ballad, Britpop, jazz trio, synthwave, folk, orchestral, lo-fi, metal. A 60 s cover takes
-about 80 s on one 4090.
-
-## Repository layout
-
-```
-fugue/          minimal inference package (adapter.py, graft.py, scion.py, cover.py)
-services/       resident services, orchestration CLI, Gradio arena
-research/       everything used to build and evaluate this (training, probes, eval, SCION.md lab notebook, eval_*.json, scripts/)
-samples/        A/B mp3s
-paper/          draft
-```
+The result figures are generated from the released JSON measurements. See [`paper/figures/`](paper/figures/README.md) to reproduce them. The historical [`SCION.md`](research/SCION.md) preserves the experiments and earlier interpretations; this README and the paper describe the released result.
 
 ## Licenses and credits
 
-Code in this repository: Apache-2.0. The adapter weights are derived from MiniMax-Music3 outputs and inherit the
-MiniMax-Music3 license terms; YuE2-3B / YuE2-Vae / SheetSage2 / MERT are © their authors (M-A-P) under their licenses.
-Nothing here modifies any upstream weight.
+Code in this repository is Apache-2.0. The adapter weights are released under the MiniMax-Music3 terms; the upstream models remain under their respective licenses. See the model repositories before deployment.
 
-Built by Henry Zhang with Claude (Fable 5). Discogs-VINet (Araz et al., ISMIR 2024) is used for identity evaluation.
+Built by Henry Zhang with Claude (Fable 5). YuE2, SheetSage2, and MERT are by M-A-P; MiniMax-Music3 is by MiniMax. Discogs-VINet is used for version-identification evaluation. Citation metadata is in [`CITATION.cff`](CITATION.cff).

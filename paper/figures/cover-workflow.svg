@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="964.8pt" height="374.4pt" viewBox="0 0 964.8 374.4" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.9.4, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 374.4
+L 964.8 374.4
+L 964.8 0
+L 0 0
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 35.28 253.44
+L 191.52 253.44
+Q 195.84 253.44 195.84 249.12
+L 195.84 174.24
+Q 195.84 169.92 191.52 169.92
+L 35.28 169.92
+Q 30.96 169.92 30.96 174.24
+L 30.96 249.12
+Q 30.96 253.44 35.28 253.44
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #f4f6f7; stroke: #59666d; stroke-width: 1.25; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 227.52 253.44
+L 411.12 253.44
+Q 415.44 253.44 415.44 249.12
+L 415.44 174.24
+Q 415.44 169.92 411.12 169.92
+L 227.52 169.92
+Q 223.2 169.92 223.2 174.24
+L 223.2 249.12
+Q 223.2 253.44 227.52 253.44
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #eef2f8; stroke: #4b678e; stroke-width: 1.25; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 455.04 253.44
+L 594.72 253.44
+Q 599.04 253.44 599.04 249.12
+L 599.04 174.24
+Q 599.04 169.92 594.72 169.92
+L 455.04 169.92
+Q 450.72 169.92 450.72 174.24
+L 450.72 249.12
+Q 450.72 253.44 455.04 253.44
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #fbf0f1; stroke: #b14c57; stroke-width: 1.25; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 638.64 253.44
+L 926.64 253.44
+Q 930.96 253.44 930.96 249.12
+L 930.96 174.24
+Q 930.96 169.92 926.64 169.92
+L 638.64 169.92
+Q 634.32 169.92 634.32 174.24
+L 634.32 249.12
+Q 634.32 253.44 638.64 253.44
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #edf7f4; stroke: #137e78; stroke-width: 1.25; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 227.52 143.28
+L 411.12 143.28
+Q 415.44 143.28 415.44 138.96
+L 415.44 90.72
+Q 415.44 86.4 411.12 86.4
+L 227.52 86.4
+Q 223.2 86.4 223.2 90.72
+L 223.2 138.96
+Q 223.2 143.28 227.52 143.28
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #eef2f8; stroke: #4b678e; stroke-width: 1.25; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 196.397051 211.68
+Q 209.51699 211.68 221.071682 211.68
+" clip-path="url(#p6bb3a8e42f)" style="fill: none; stroke: #59666d; stroke-width: 1.4; stroke-linecap: round"/>
+    <path d="M 215.871682 209.08
+L 221.071682 211.68
+L 215.871682 214.28
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #59666d; stroke: #59666d; stroke-width: 1.4; stroke-linecap: round"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 415.998369 211.68
+Q 433.079354 211.68 448.595092 211.68
+" clip-path="url(#p6bb3a8e42f)" style="fill: none; stroke: #59666d; stroke-width: 1.4; stroke-linecap: round"/>
+    <path d="M 443.395092 209.08
+L 448.595092 211.68
+L 443.395092 214.28
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #59666d; stroke: #59666d; stroke-width: 1.4; stroke-linecap: round"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 599.598369 211.68
+Q 616.679354 211.68 632.195092 211.68
+" clip-path="url(#p6bb3a8e42f)" style="fill: none; stroke: #59666d; stroke-width: 1.4; stroke-linecap: round"/>
+    <path d="M 626.995092 209.08
+L 632.195092 211.68
+L 626.995092 214.28
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #59666d; stroke: #59666d; stroke-width: 1.4; stroke-linecap: round"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 319.32 143.839951
+Q 319.32 156.60056 319.32 167.795921
+" clip-path="url(#p6bb3a8e42f)" style="fill: none; stroke: #4b678e; stroke-width: 1.4; stroke-linecap: round"/>
+    <path d="M 321.92 162.595921
+L 319.32 167.795921
+L 316.72 162.595921
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #4b678e; stroke: #4b678e; stroke-width: 1.4; stroke-linecap: round"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 319.32 254.001401
+Q 319.32 272.522338 319.32 289.478027
+" clip-path="url(#p6bb3a8e42f)" style="fill: none; stroke: #4b678e; stroke-width: 1.4; stroke-linecap: round"/>
+    <path d="M 321.92 284.278027
+L 319.32 289.478027
+L 316.72 284.278027
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #4b678e; stroke: #4b678e; stroke-width: 1.4; stroke-linecap: round"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 782.64 254.001401
+Q 782.64 272.522338 782.64 289.478027
+" clip-path="url(#p6bb3a8e42f)" style="fill: none; stroke: #137e78; stroke-width: 1.4; stroke-linecap: round"/>
+    <path d="M 785.24 284.278027
+L 782.64 289.478027
+L 780.04 284.278027
+z
+" clip-path="url(#p6bb3a8e42f)" style="fill: #137e78; stroke: #137e78; stroke-width: 1.4; stroke-linecap: round"/>
+   </g>
+   <g id="text_1">
+    <text style="fill: #20282c; font: 700 20px 'DejaVu Sans'; text-anchor: start" x="32.4" y="49.756875" transform="rotate(-0 32.4 49.756875)">From an existing song to a new arrangement</text>
+   </g>
+   <g id="text_2">
+    <text style="fill: #59666d; font: 11px 'DejaVu Sans'; text-anchor: start" x="32.4" y="79.638281" transform="rotate(-0 32.4 79.638281)">The score carries the musical material; a style prompt specifies its new setting.</text>
+   </g>
+   <g id="text_3">
+    <text style="fill: #59666d; font: 700 12px 'DejaVu Sans'; text-anchor: middle" x="113.4" y="200.429175" transform="rotate(-0 113.4 200.429175)">Recording or ABC</text>
+   </g>
+   <g id="text_4">
+    <text style="fill: #20282c; font: 10px 'DejaVu Sans'" transform="translate(49.885937 224.018664)">SheetSage2 transcription</text>
+    <text style="fill: #20282c; font: 10px 'DejaVu Sans'" transform="translate(50.264844 237.116086)">when starting from audio</text>
+   </g>
+   <g id="text_5">
+    <text style="fill: #4b678e; font: 700 12px 'DejaVu Sans'; text-anchor: middle" x="319.32" y="200.47605" transform="rotate(-0 319.32 200.47605)">YuE2-3B</text>
+   </g>
+   <g id="text_6">
+    <text style="fill: #20282c; font: 10px 'DejaVu Sans'" transform="translate(250.168438 224.018664)">Frozen AR + NAR generator</text>
+    <text style="fill: #20282c; font: 10px 'DejaVu Sans'" transform="translate(269.233281 237.116086)">64-d latent at 25 Hz</text>
+   </g>
+   <g id="text_7">
+    <text style="fill: #b14c57; font: 700 12px 'DejaVu Sans'; text-anchor: middle" x="524.88" y="200.429175" transform="rotate(-0 524.88 200.429175)">Fugue adapter</text>
+   </g>
+   <g id="text_8">
+    <text style="fill: #20282c; font: 10px 'DejaVu Sans'" transform="translate(478.8425 224.018664)">66.6M parameters</text>
+    <text style="fill: #20282c; font: 10px 'DejaVu Sans'" transform="translate(459.931562 237.116086)">2048-d condition at 25 Hz</text>
+   </g>
+   <g id="text_9">
+    <text style="fill: #137e78; font: 700 12px 'DejaVu Sans'; text-anchor: middle" x="782.64" y="200.47605" transform="rotate(-0 782.64 200.47605)">MiniMax-Music3</text>
+   </g>
+   <g id="text_10">
+    <text style="fill: #20282c; font: 10px 'DejaVu Sans'" transform="translate(704.6775 224.018664)">Frozen DiT + Flow-VAE vocoder</text>
+    <text style="fill: #20282c; font: 10px 'DejaVu Sans'" transform="translate(710.976719 237.116086)">Native condition upsampling</text>
+   </g>
+   <g id="text_11">
+    <text style="fill: #4b678e; font: 700 12px 'DejaVu Sans'; text-anchor: middle" x="319.32" y="108.384375" transform="rotate(-0 319.32 108.384375)">Target style</text>
+   </g>
+   <g id="text_12">
+    <text style="fill: #20282c; font: 10px 'DejaVu Sans'; text-anchor: middle" x="319.32" y="128.399375" transform="rotate(-0 319.32 128.399375)">Optional lyrics</text>
+   </g>
+   <g id="text_13">
+    <text style="fill: #20282c; font: 9px 'DejaVu Sans'; text-anchor: middle" x="209.52" y="195.84" transform="rotate(-0 209.52 195.84)">ABC</text>
+   </g>
+   <g id="text_14">
+    <text style="fill: #4b678e; font: 700 11px 'DejaVu Sans'; text-anchor: middle" x="319.32" y="311.76" transform="rotate(-0 319.32 311.76)">YuE2-native decode</text>
+   </g>
+   <g id="text_15">
+    <text style="fill: #59666d; font: 10px 'DejaVu Sans'; text-anchor: middle" x="319.32" y="331.92" transform="rotate(-0 319.32 331.92)">Same-latent A/B reference</text>
+   </g>
+   <g id="text_16">
+    <text style="fill: #137e78; font: 700 13px 'DejaVu Sans'; text-anchor: middle" x="782.64" y="311.76" transform="rotate(-0 782.64 311.76)">Fugue cover</text>
+   </g>
+   <g id="text_17">
+    <text style="fill: #20282c; font: 11px 'DejaVu Sans'; text-anchor: middle" x="782.64" y="331.92" transform="rotate(-0 782.64 331.92)">44.1 kHz stereo</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p6bb3a8e42f">
+   <rect x="0" y="0" width="964.8" height="374.4"/>
+  </clipPath>
+ </defs>
+</svg>

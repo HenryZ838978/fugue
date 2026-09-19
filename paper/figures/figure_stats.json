@@ -1,0 +1,41 @@
+{
+  "per_item_sha256": "a23e07b095566f3cb3d5a3d5c2e046eba0fdd06b2ba72016c88f40a5f59c4278",
+  "summary_sha256": "fe7a4db25d06bd065a793300207f418e86e50fd38726fb2e399b97a40af1e766",
+  "n_matched_latents": 418,
+  "n_fullscore_source_songs": 209,
+  "gallery_size_reported_in_protocol": 210,
+  "rank_identical": 239,
+  "rank_fugue_higher": 63,
+  "rank_native_higher": 116,
+  "mrr_ratio_fugue_to_native": 0.9426456143710544,
+  "spectral_increases": {
+    "hi8k": {
+      "n_increased": 415,
+      "fraction_increased": 0.992822966507177,
+      "median_paired_difference": 0.004323328470491106
+    },
+    "hi12k": {
+      "n_increased": 415,
+      "fraction_increased": 0.992822966507177,
+      "median_paired_difference": 0.0011742797105398495
+    },
+    "rolloff99": {
+      "n_increased": 418,
+      "fraction_increased": 1.0,
+      "median_paired_difference": 3822.69287109375
+    },
+    "side_mid_db": {
+      "n_increased": 405,
+      "fraction_increased": 0.9688995215311005,
+      "median_paired_difference": 6.051527142524719
+    }
+  },
+  "all_four_increased": 400,
+  "dtw_available_by_arm": {
+    "fullscore-graft": 375,
+    "fullscore-yue2vae": 372,
+    "noscore-graft": 197,
+    "noscore-yue2vae": 197
+  },
+  "dtw_matched_pairs": 372
+}

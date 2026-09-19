@@ -1,254 +1,235 @@
-# Fugue: Grafting a Score-Reading Music Language Model onto a Frozen High-Fidelity Diffusion Renderer
+# Fugue: High-Fidelity Music Covers by Grafting Frozen Generators
 
-**Henry Zhang** · with Claude (Fable 5)
-*Draft v0.1 — 2026-09-20*
+**Henry Zhang**
+
+*Draft v0.2. Implementation and experiment assistance: Claude (Fable 5).*
 
 ## Abstract
 
-Open music generators today split along a line: models that read symbolic scores (and therefore can cover a song) and
-models that sound like records. YuE2-3B reads ABC notation natively but decodes through a VAE that loses the top octave
-and stereo width; MiniMax-Music3 (MM3) renders with a 2.4B flow-matching DiT and a 44.1 kHz stereo vocoder but its
-language model cannot be conditioned on a score — four training regimes on MM3's 8B LM measured a conditional effect of
-≈0. We show that the two can be *grafted*: a 66M-parameter adapter maps YuE2's 64-dimensional, 25 Hz acoustic latent into
-the 2048-dimensional, 25 Hz condition that MM3's DiT expects, with both upstream models entirely frozen. The adapter is
-trained by regression on 191 hours of MM3's own generations — targets are recovered by teacher-forcing MM3's RVQ codes
-back through its LM, inputs by encoding the rendered audio with YuE2's public VAE encoder — so no human labels and no
-access to MM3's unreleased quantizer are needed. On 209 real recordings covered into two styles each, score following is unchanged
-(re-transcription DTW 0.523 vs 0.470 for YuE2's native decode; no-score control 1.686), version-identification
-retrieval of the source keeps 94 % of YuE2's MRR (0.609 vs 0.646; 239/418 pairs at the identical rank; no-score
-control at chance), and the rendered audio regains the high band and stereo width of a master on 99.3 % of pairs. We release the adapter, the services, an interactive arena, and the lab notebook.
+A useful music cover must remain recognizable as the source song while adopting a different arrangement and production style. Fugue combines YuE2-3B's score-conditioned generation with MiniMax-Music3's diffusion-based acoustic renderer, without updating either pretrained model. A 66.6M-parameter adapter maps YuE2's acoustic latents into the renderer's existing conditioning interface. The adapter requires no additional original/cover pairs or human annotations: its inputs and targets are constructed from the audio and stored codes of MM3's own generations. On 209 real songs covered into two target styles each, Fugue achieves source-song retrieval MRR 0.609 versus 0.646 for YuE2's native decoder; a style-only control yields 0.022. Across the same 418 generated latents, median spectral rolloff rises from 13.8 to 17.6 kHz and stereo side/mid power from -10.9 to -4.8 dB. These acoustic changes accompany the author's listening preference for the grafted renderer. We release the inference package, adapter, evaluation records, and figure-generation code. Fugue demonstrates that score-conditioned behavior can be added to a frozen renderer by learning an external interface from self-generated data.
 
 ## 1. Introduction
 
-A *cover* keeps a song's identity — its melody, harmony and structure — and changes everything else. Doing this with a
-generative model requires two capabilities that current open systems have separately:
+Cover generation starts from musical material that a user already wants to keep. The task is to change its setting: for example, turn a vocal recording into a piano arrangement, or realize the same song as guitar-driven rock. This makes identity preservation, style control, and acoustic rendering jointly important. A convincing output in the requested genre is not a successful cover if it has lost the intended song.
 
-1. **Symbolic conditioning.** The model must read a score (or an equivalent symbolic plan) and follow it. YuE2-3B [1]
-   does this: on its authors' SHS100K zero-shot cover benchmark, supplying the source score raises version-identification
-   Hit@1 from 0.3 % to 71.3 %.
-2. **Acoustic quality.** The renderer must produce a master-quality signal. MiniMax-Music3 [2] is, among open models,
-   the one whose DiT + Flow-VAE vocoder most sounds like a record; on WildSongBench it trails only YuE2 and Suno.
+YuE2-3B [1] provides score-conditioned music generation, including ABC input and a non-autoregressive acoustic stage. MiniMax-Music3 (MM3) [2] provides a diffusion transformer and stereo vocoder whose rendering quality motivated this work. We use the former to generate score-conditioned musical content and the latter to render it. The models are connected before waveform decoding through a learned latent mapping.
 
-These are not the same model, and making one model do both is expensive. Our first four attempts (§3) tried to teach
-MM3's language model to read ABC and all failed by the same teacher-forcing measure, while YuE2 measured under the same
-ruler read scores 136× better. The remaining variable was the model itself. So instead of training either model, we ask
-whether the two can be *joined at the latent*: take YuE2's acoustic latent, which is what its own VAE would decode, and
-translate it into the condition MM3's DiT was trained to follow.
+![Fugue inference pipeline and its native-decoder reference branch.](figures/cover-workflow.png)
 
-The reason this is plausible is a measurement of MM3's LM→DiT bridge (§2): the DiT is conditioned on a single 2048-d
-vector per 25 Hz frame, 90.6 % of which comes from the LM hidden state, scaled to 6.85 % amplitude and nearest-upsampled
-×3.445 to the latent rate. The DiT receives a low-amplitude, 25 Hz "route map" and fills in all acoustic detail itself.
-The map's *identity* lives upstream; its *texture* lives in the DiT. Grafting replaces the source of the map.
+*Figure 1. A recording is transcribed into ABC, or a score is supplied directly. YuE2 generates an acoustic latent under the score and style prompt. Fugue maps that latent into MM3's native DiT condition. The native YuE2 decoder provides a paired reference for isolating the rendering change.*
 
-Contributions:
+The name **Fugue** draws on the return of a recognizable subject through interweaving musical voices. It expresses a design goal: keep continuity in a vocal or instrumental line while allowing its surroundings to change and respond. The current system realizes this through score-conditioned generation of mixed audio.
 
-- A frozen-frozen grafting recipe between two unrelated music generators, mediated by a 66M adapter trained on
-  self-generated pairs with zero labels (§4).
-- A measurement of where MM3's music lives (§2) and an alignment correction for MM3's stitched time axis without which
-  the pairing is off by up to three frames (§4.2).
-- Evidence that score following and identity pass through the graft intact while spectral quality moves to the
-  renderer's level (§5), plus a negative result on automatic aesthetic scoring (§5.4).
-- Open weights, services, an arena, and the full notebook.
+The central contribution is **a way to compose existing capabilities without additional cover-pair supervision**. Training examples are constructed from MM3 generations with stored RVQ codes; no recording has to be paired with a human or model-produced cover. We also identify a usable cross-model interface, correct the time-axis mismatch introduced by chunked rendering, and evaluate the resulting system on real-song covers. The main experiment appears in Section 3; the unsuccessful attempts to train score conditioning directly into MM3 are retained in Appendix A.
 
-## 2. Where MiniMax-Music3 keeps its music
+## 2. Method
 
-MM3 generates in two stages: an 8B Qwen3-based LM emits one semantic code per 25 Hz frame, a 0.6B depth decoder emits
-seven residual codes per frame, and a 2.4B flow-matching DiT renders a 128-d latent at 86.13 Hz from the *hidden states*
-of those two stages, which a Flow-VAE vocoder turns into 44.1 kHz stereo. The bridge between LM and DiT is one class,
-`ConditionEncoder`:
+### 2.1 A shared interface for training and inference
 
-```
-c = proj( layer_scale · Σ_l softmax(w)_l · h_l ),   then nearest-upsample ×(44100/512)/(24000/960) = 3.445
+YuE2's AR path produces semantic tokens, and its NAR flow-matching stage produces an acoustic latent `z` with 64 dimensions at 25 Hz. The public YuE2 VAE encoder maps audio into the same latent format. We choose this representation because it is available both from training audio and from score-conditioned generation. YuE2's NAR hidden states vary with the denoising step; they are not the fixed interface used here.
+
+MM3 normally constructs its DiT condition from hidden states of its language model and RVQ depth decoder. We target the 2048-dimensional output of `ConditionEncoder` **before temporal upsampling**, denoted `c25`. The adapter predicts `c25` from `z`; MM3's upsampling, DiT, and vocoder then run unchanged. YuE2's native VAE decoder and MM3's LM/depth decoder are not used on the main cover-generation path.
+
+```text
+z: (T, 64), 25 Hz
+    -> Fugue adapter
+    -> c25: (T, 2048), 25 Hz
+    -> MM3 native nearest-neighbor upsampling
+    -> frozen DiT and Flow-VAE vocoder
+    -> 44.1 kHz stereo
 ```
 
-with learned `softmax(w) = [0.906, 0.013, 0.013, 0.013, 0.014, 0.014, 0.014, 0.014]` (LM first, then the seven depth
-layers, which the model does not distinguish), `layer_scale = 0.0685`, and `proj` a 4096→2048 conv with kernel 3.
+The two representations have the same nominal frame rate. MM3's chunked rendering nevertheless introduces a time-axis drift that must be corrected when pairing the training data.
 
-Three consequences. (i) The DiT's condition is 90.6 % LM hidden state. (ii) It is small (6.85 % amplitude) and coarse
-(25 Hz, held for 3.445 latent frames). (iii) MM3's 25 Hz frame rate (24000/960) is the same as YuE2's VAE rate
-(48000/1920) — both, we suspect, inherited from video pipelines — so no resampling is needed between the two.
+### 2.2 Supervision from self-generated recordings
 
-We confirm (ii) directly (§5.3): adding white noise at 30 % of the per-channel variance to `c` changes the output's
-log-mel distance to the original by +0.04, against a seed-to-seed floor of 0.70; zeroing `c` gives 2.28.
+The paired corpus contains 12,837 MM3 generations, approximately 191 hours, with audio, RVQ codes, captions, and lyrics. For each generation we construct:
 
-## 3. Why we stopped training MM3
+1. **Input:** resample the rendered audio from 44.1 to 48 kHz and encode it with the frozen YuE2 VAE encoder.
+2. **Target:** teacher-force the stored codes and original prompt through MM3's frozen LM and depth decoder, then apply `ConditionEncoder` through its projection layer to recover `c25`.
 
-Under one teacher-forcing ruler — the drop in next-code cross-entropy when the true ABC is replaced by another song's
-ABC, `d_spec` — four designs on MM3's LM gave the same answer (Table 1). YuE2 under the identical ruler and identical
-prompt placement gives +0.340. The fourth round (r4) reproduced YuE2's training regime (plan loss, condition dropout,
-keeping tempo lines) and drove the ABC-writing loss from 23.1 to 0.49 — the model *learned to write ABC* — while `d_spec`
-stayed at +0.0025. The break is not between "seeing" and "writing" the score but between writing it and using it to
-write audio. Placement, token space and position were ruled out by construction (r1 uses YuE2's placement). What remained
-was the model.
+![Training and inference paths, highlighting the shared adapter and the construction of supervision from one MM3 generation.](figures/training-pairs.png)
 
-| experiment | placement | `d_spec` | paired wins |
-|---|---|---:|---:|
-| r1 / r2 | ABC text as prefix | ≈0 | — |
-| stage A | codec tokens as prefix | ≈0 | — |
-| r3 | in-stream + prefix | +0.0003 | 26/48 |
-| r4 | YuE2 regime | +0.0025 | 18/24 |
-| **YuE2-3B** (control) | ABC text as prefix (= r1) | **+0.340** | **24/24** |
+*Figure 2. Both sides of a training pair describe the same generated recording. At inference, YuE2's score-conditioned AR/NAR generator replaces the VAE encoder as the source of `z`. Only the adapter is optimized. No original/cover pairs are used in this adaptation stage.*
 
-*Table 1. Conditional effect of the score on next-code prediction.*
+Stored generation codes avoid the need for MM3's unreleased audio-to-RVQ quantizer. In a reconstruction check, rendering the teacher-forced condition gives log-mel L1 0.686 to the stored original, compared with 0.698 between two renders using different DiT seeds. This provides an empirical consistency check on condition recovery.
 
-## 4. Method
+Training uses encoder latents while cover inference uses NAR-generated latents. These inputs share a format but need not share a distribution. We therefore normalize channels and add Gaussian noise to the training inputs. Evaluation on real-song covers tests the complete path through transcription, YuE2 generation, and the adapter.
 
-### 4.1 Interface
+**Temporal alignment.** MM3 renders 200-frame windows with a 100-frame hop. Each full window yields 689 acoustic latents; stitching advances 345 latents per hop instead of the nominal 344.53125. Consequently, frame `j` of the MM3 condition corresponds approximately to YuE2 frame
 
-YuE2's acoustic stage is not "hidden → VAE"; it is a flow-matching velocity field inside the LM (a mixture-of-transformers
-NAR path), so its hidden states change with the ODE time step and are not a clean condition. Moreover YuE2's *semantic*
-tokenizer is not released, so arbitrary audio cannot be tokenized for its AR path. The only YuE2 representation obtainable
-from the same audio on both the training and inference sides is the **VAE latent** (64-d, 25 Hz; the encoder is public),
-which is also exactly what the NAR stage outputs at inference. The interface is therefore
-
-```
-z (T, 64) @ 25 Hz  ──adapter──▶  c25 (T, 2048) @ 25 Hz  ──MM3 nearest ×3.445──▶  DiT condition
+```text
+m(j) = round(j + 0.136054 * k(j))
+k(j) = 0                              if j < 125
+       floor((j - 25) / 100)           otherwise
 ```
 
-with `c25` defined as ConditionEncoder's output *before* upsampling. Everything in MM3 downstream of `c25` is untouched;
-YuE2's VAE decoder is bypassed entirely.
+The implementation clamps `k(j)` to the final rendering window and clips the resulting input index. The coefficient is `345 / (441 / 128) - 100`. Accounting for this drift raises the three-frame-context ridge probe from R² 0.262 to 0.347 in the alignment experiment.
 
-### 4.2 Pairs for free
+### 2.3 Adapter and optimization
 
-MM3's quantizer (audio → RVQ codes) is unreleased, so "any recording → MM3 condition" is not available. It is not needed.
-For 12,837 songs MM3 generated itself (the public `mm3-rvq-distill-corpus-8k`, ≈191 h, with codes, captions and lyrics),
-we teacher-force the stored codes back through MM3's LM and depth decoder — a single causal forward each — and apply
-ConditionEncoder up to `proj`. We verified the recovered hidden bundle is equivalent to generation-time: re-rendering it
-gives log-mel L1 0.686 to the original, equal to the 0.698 obtained by changing the DiT seed. The input side is YuE2's VAE
-encoder applied to the rendered 44.1 kHz audio resampled to 48 kHz. Domain shift between MM3's generations and real
-recordings is common-mode here — both sides see the same audio — and only bites at inference (§5.2).
+The adapter consists of a 64-to-768 linear projection, two residual local convolutions of kernel size 5, a residual grouped positional convolution of kernel size 63 with 16 groups, eight pre-LN bidirectional Transformer layers with 12 heads, and a final normalization and 768-to-2048 projection. It has 66.6M parameters and no absolute position embeddings.
 
-**Alignment.** MM3 renders in 200-frame windows with a 100-frame hop; each window yields ⌊200 × 3.4453⌋ = 689 latents and
-the stitched output advances 345 latents per hop against a nominal 344.53, so window *k* lags the nominal clock by
-0.136·k YuE2 frames — three frames by the end of a 105 s song. Frame *j* is paired with YuE2 frame
-`round(j + 0.1358·k(j))`, `k(j) = 0` for `j < 125` else `⌊(j−25)/100⌋`. A linear probe rises from R² 0.262 (naive) to
-0.347 (corrected), and a shift scan peaks at 0.
+Inputs and targets are standardized per channel. Let `y_tc` be a standardized target, `a_tc` the adapter prediction, and `sigma_c` the raw target-channel standard deviation. The masked loss is
 
-### 4.3 Adapter
+```text
+w_c = 0.5 + 0.5 * sigma_c^2 / mean_c(sigma_c^2)
+L   = mean_valid_frames [ mean_c (w_c * (a_tc - y_tc)^2) ]
+```
 
-`Linear(64→768) → 2× Conv1d(k=5) → depthwise Conv1d(k=63) → 8-layer pre-LN bidirectional Transformer (12 heads) →
-LayerNorm → Linear(768→2048)`, 66.6M parameters, no absolute positions; inference is chunked (768 + 128 context) to match
-the training crop. Loss is masked MSE in per-channel z-scored space, weighted `0.5 + 0.5 σ_c²/mean σ²` because the 2048
-condition channels span a 35× range of standard deviation and the DiT sees the raw scale. Gaussian noise (σ = 0.15 in
-standardized units) is added to the input during training to cover the gap between encoder latents (train) and
-NAR-generated latents (inference); the decode→encode round-trip of a generated latent differs by 0.15 mean-absolute.
-AdamW, 3e-4, cosine, 20k steps of 24 × 768-frame crops, bf16, 67 minutes on one RTX 4090.
+Input noise has standard deviation 0.15 in standardized units. The adapter is trained on 10,340 songs using AdamW, learning rate 3e-4 with warmup and cosine decay, 20,000 steps, and batches of 24 crops of 768 frames. The v4 run takes 67 minutes on one RTX 4090 after feature extraction. Corpus generation and extraction are additional costs; the measured corpus-wide teacher-forcing and VAE-encoding passes took about 53 and 74 single-GPU minutes respectively.
 
-| model | held-out R² (variance-weighted) | per-channel R² |
+At inference, adapter predictions use 768-frame windows with 128 frames of context on each side, avoiding full-song quadratic attention. Output channels are unstandardized before MM3 rendering. YuE2 generation and acoustic rendering have separate random seeds.
+
+## 3. Real-song cover evaluation
+
+### 3.1 Protocol
+
+The local benchmark, retained under the historical name `ood216`, contains 210 recordings with SheetSage2 transcriptions from a Japanese/Chinese pop and soundtrack catalogue. One transcription exceeds YuE2's context limit, leaving **209 source songs** for the full-score condition. Each is generated into two target styles, producing **418 latents**, each decoded by both YuE2's native VAE and Fugue v4. The retrieval gallery still contains **all 210 original recordings**.
+
+The six target styles are piano ballad, Britpop guitar rock, jazz trio, synthwave, acoustic folk, and orchestral film score. Each song receives two styles three positions apart in this list, as specified in `eval_gen.py`. Generations are instrumental, limited to the first 60 seconds, with YuE2 seed 0; Fugue uses DiT seed 7 and 30 steps. The no-score control uses `cot=off`, the first assigned style for each song, and both decoders, yielding 210 outputs per decoder.
+
+Identity is measured by cosine-similarity retrieval with Discogs-VINet [3], with the matching original as the single relevant gallery item. Style is measured by CLAP audio/text cosine similarity using `laion/larger_clap_music_and_speech`. Score following is measured by re-transcribing the output with SheetSage2 and computing DTW on instrumental-voice pitch-interval sequences. Outputs with insufficient transcribed notes are excluded from DTW aggregates.
+
+This is a local paired-renderer evaluation, not a reproduction of the full SHS100K benchmark. The first 60 seconds of each original queried against the full-recording gallery provide a reference retrieval result: Hit@1 0.819, Hit@10 0.933, and MRR 0.861.
+
+### 3.2 Identity and style together
+
+![Identity and style metrics for the two decoders, with and without the source score.](figures/identity-and-style.png)
+
+*Figure 3. Source identity and target style measure different requirements. Removing the score raises the aggregate CLAP median but reduces source retrieval to near-chance performance. The controls use one style per song; score-conditioned evaluation uses two.*
+
+| Input and decoder | n | Hit@1 | Hit@10 | MRR | CLAP median |
+|---|---:|---:|---:|---:|---:|
+| Source score, YuE2 native | 418 | 0.557 | 0.809 | 0.646 | 0.319 |
+| **Source score, Fugue** | **418** | **0.524** | **0.775** | **0.609** | **0.304** |
+| Style only, YuE2 native | 210 | 0.000 | 0.033 | 0.022 | 0.436 |
+| Style only, Fugue | 210 | 0.000 | 0.033 | 0.022 | 0.418 |
+
+*Table 1. Identity and style on the local cover benchmark. Both conditions use YuE2 generation and differ in whether the source score is supplied.*
+
+Fugue retains 94% of the native decoder's MRR. Its Hit@1 is lower by 3.35 percentage points. Across shared latents, source rank is unchanged in 239 pairs, higher with Fugue in 63, and higher with YuE2 native in 116. The median paired CLAP difference is -0.019. The graft therefore preserves much of the source-identification capability while changing the acoustic rendering.
+
+Re-transcription DTW medians are 0.470 for YuE2 native and 0.523 for Fugue, computed over 372 and 375 valid outputs. Across the **372 pairs valid for both decoders**, the median paired difference is 0.000. The corresponding style-only medians are 1.686 and 1.622 over 197 valid outputs each.
+
+### 3.3 Acoustic rendering and listening
+
+The author preferred Fugue's rendering in informal development comparisons, particularly its high-frequency detail and stereo presentation. The release supplies same-latent A/B previews, a source-to-cover comparison in two styles, a vocal example, and one full-length example.
+
+![Scatter plots of four acoustic measurements, one point per shared latent, with the identity diagonal and marginal medians.](figures/acoustic-changes.png)
+
+*Figure 4. Acoustic changes across 418 paired renders. High-band energy axes are logarithmic; rolloff and stereo power use linear axes. The diamond marks the two marginal medians. Values above the diagonal indicate an increase in the plotted measurement, not a perceptual preference vote.*
+
+| Measurement | YuE2 native median | Fugue median | Pairs with an increase |
+|---|---:|---:|---:|
+| Energy above 8 kHz | 0.466% | 0.966% | 415/418 (99.3%) |
+| Energy above 12 kHz | 0.070% | 0.209% | 415/418 (99.3%) |
+| 99% spectral rolloff | 13.8 kHz | 17.6 kHz | 418/418 (100%) |
+| Stereo side/mid power | -10.9 dB | -4.8 dB | 405/418 (96.9%) |
+
+*Table 2. Spectral and stereo measurements. All four increase simultaneously in 400/418 pairs (95.7%).*
+
+The median paired differences are +3.8 kHz for rolloff and +6.1 dB for side/mid power. High-band energy is measured from the mono power spectrum. Rolloff is the median framewise frequency containing 99% of the cumulative magnitude spectrum. Stereo width is reported as `10 log10(var(L-R) / var(L+R))`, with the numerical stabilizers used in `eval_score.py`.
+
+Audiobox-Aesthetics PQ decreases by a median paired 0.278, opposite to the author's listening preference. We report both results and leave the mechanism of the disagreement open. In a separate codec round-trip case study on a real recording, YuE2 VAE achieves SI-SDR 7.7 dB and MM3 Flow-VAE 17.7 dB. This experiment measures codec reconstruction, a distinct question from producing a new arrangement.
+
+## 4. Interface analysis
+
+### 4.1 What is learned
+
+| Adapter or probe | Variance-weighted R² | Mean channel R² |
 |---|---:|---:|
-| ridge, ±8 frames (linear ceiling) | 0.384 | 0.150 |
-| ridge on MM3's own DAV latent (128-d, pooled) | 0.20 | 0.09 |
-| v1: 6L d512, 1,050 songs | 0.593 | 0.369 |
-| v2: 8L d768, all 10,340 songs | 0.665 | 0.464 |
-| v3: + variance-weighted loss | 0.672 | 0.462 |
-| **v4: + input noise 0.15 (released)** | 0.671 | 0.461 |
+| Ridge, YuE2 latent with 17-frame context | 0.384 | 0.150 |
+| Ridge, pooled MM3 DAV latent with 17-frame context | 0.201 | 0.086 |
+| v1: 6 layers, width 512, 1,050 training songs | 0.593 | 0.369 |
+| v2: 8 layers, width 768, 10,340 training songs | 0.665 | 0.464 |
+| v3: v2 with variance-weighted loss | 0.672 | 0.462 |
+| **v4: v3 with input noise, released** | **0.671** | **0.461** |
 
-*Table 2. Fit to the DiT condition. The DAV row shows YuE2's latent is a better interface than MM3's own waveform latent.*
+*Table 3. Condition-prediction results from the development runs. Ridge and neural-adapter experiments use different fitting/evaluation subsets; this table is not a controlled scaling comparison. The v4 validation run uses 150 held-out songs. R² uses the training-channel mean as its reference; it measures condition regression, not cover quality.*
 
-## 5. Experiments
+The YuE2 latent is more predictive than the pooled MM3 DAV latent under the tested linear readouts. The Transformer adapters fit the condition better than the ridge baseline.
 
-Two songs from the corpus (a Britpop track with vocals; a 5/4 jazz instrumental) and one real recording (s-AVE, 4:35)
-serve the case studies; 210 real recordings serve the benchmark (§5.5).
+Input-noise augmentation leaves validation R² almost unchanged. In the real-song piano case study, v4 reduces re-transcription DTW from v3's 0.434 to 0.369, compared with 0.353 for YuE2 native. On one MM3 reconstruction case, v4 reduces log-mel L1 from v3's 0.787 to 0.740. These cases motivated the release choice; the 209-song benchmark evaluates v4 rather than an all-version ablation.
 
-### 5.1 Score following survives the graft
+### 4.2 Renderer sensitivity
 
-Each output is re-transcribed with SheetSage2 and compared with the input ABC by DTW over the interval sequence of the
-instrumental voice (0 = identical transcription). For the Britpop song: YuE2 native decode 0.064, Fugue 0.064 (v1–v3;
-v4 0.079); grafted *reconstruction* of the MM3 original 0.000 (v2–v4) with the vocal voice at 0.197 vs 0.200 for the
-original re-rendered; no-score control 1.0–1.08; zero-condition 0.53. Jazz: 0.405 → 0.371 (v3) / 0.390 (v4). Real song,
-piano cover: 0.353 → 0.369 (v4; v1–v3 0.41–0.43), against 0.219 for re-transcribing the real recording itself.
-Chroma agreement between the two decodes of the same latent reaches the change-the-seed ceiling (+0.058 vs +0.055).
-
-### 5.2 Domain shift
-
-v4's input-noise augmentation is what closes the gap on real-song covers (the most out-of-distribution latents): 0.434 →
-0.369 DTW, and its grafted reconstruction is the closest to the seed floor (log-mel L1 0.740 vs 0.69). R² is unchanged
-by the augmentation; the effect is entirely at inference.
-
-### 5.3 What the DiT tolerates
-
-| condition | log-mel L1 to original |
+| Condition in the 30-second reconstruction case | Log-mel L1 to stored original |
 |---|---:|
-| teacher-forced (seed 7 / seed 8) | 0.686 / 0.703 |
-| + 10 % / 30 % variance white noise | 0.697 / 0.729 |
-| Fugue v4 grafted reconstruction | 0.740 |
-| zero (DiT prior) | 2.279 |
-| another song's condition | 5.077 |
+| Teacher-forced, DiT seed 7 / seed 8 | 0.686 / 0.703 |
+| Added noise, 10% / 30% of per-channel variance | 0.697 / 0.729 |
+| Fugue v4 condition predicted from encoded audio | 0.740 |
+| Zero condition | 2.279 |
+| Another song's condition | 5.077 |
 
-### 5.4 Quality: what the ear hears, what the spectrum shows, and what Audiobox gets wrong
+*Table 4. Condition perturbations for one MM3-generated Britpop example. Each row compares its output with the stored original. The separate seed-to-seed distance is 0.698.*
 
-Blind listening by the first author on the core A/B (same latent, two decoders): YuE2-Vae "sounds like nothing special";
-Fugue "is a different tier — free airline earbuds vs. AirPods Pro". The spectrum agrees:
+This case shows tolerance to moderate unstructured condition error while remaining sensitive to removing or replacing the condition. Learned adapter residuals are structured and may behave differently from Gaussian noise.
 
-| same latent | energy >8 kHz | >12 kHz | 99 % rolloff | side/mid |
-|---|---:|---:|---:|---:|
-| YuE2-Vae decode | 0.43 % | 0.08 % | 13.2 kHz | −12.9 dB |
-| Fugue v4 | 0.95 % | 0.32 % | 18.3 kHz | −8.4 dB |
-| reference: MM3 original / real record | 0.37 % / 0.26 % | 0.07 % / 0.03 % | 16.6 / 12.4 kHz | −5.9 / −6.1 dB |
+The native condition projection and frame rates are documented in Appendix B.
 
-YuE2's VAE also reconstructs a real recording at 7.7 dB SI-SDR against 17.7 dB for MM3's Flow-VAE. Audiobox-Aesthetics
-PQ, however, scores YuE2-Vae *higher* on every pair (8.43 vs 8.09), and scores the YuE2-Vae round-trip of a real song
-above the real song. It rewards smoothness; it is not a fidelity metric for this comparison and we report it only for
-completeness. DiT-seed variance of every metric is negligible (PQ 8.12–8.19 over four seeds).
+### 4.3 Runtime and long-form example
 
-The graft does shift timbre toward MM3's priors (a blues-rock latent renders slightly harder-rock); key is preserved
-(SheetSage2 reads K:Dm for both decodes; CLAP major−minor probe +0.166 vs +0.163).
+The resident transcription/YuE2 and graft/rendering services occupy approximately 9.8 GB and 4.9 GB on the reference 24 GB GPU. A 30-second cover takes about 50 seconds end to end. A 4:37 piano output was generated with AR, NAR, and acoustic-rendering times of 54, 23, and 118 seconds. These individual runs use resident models; the long example exercises the chunked inference path.
 
-### 5.5 Cover benchmark on real recordings
+## 5. Discussion: control after pretraining
 
-Protocol (mirrors the SHS100K zero-shot cover evaluation on the YuE2 model card, at 1/50 the database): 209 real
-recordings (one of 210 excluded: its 48k-token score exceeds YuE2's 24,576 context), SheetSage2 score, two contrasting
-target styles per song from a bank of six (instrumental), first 60 s, one seed; a no-score arm (YuE2 `cot=off`, style
-only) as control. Identity = Discogs-VINet [3] retrieval of the source among the 209 originals; the same YuE2 latent is
-decoded by YuE2-Vae and by Fugue, so each row pair is the same music through two renderers.
+A pretrained generator's default inference pipeline need not be its final interface. Fugue is an instance of **external adaptation after pretraining**: the learned bridge changes which upstream musical representations can drive a renderer, while the original weights remain fixed. The additional cover capability belongs to the composed system, not to a newly score-trained MM3 backbone.
 
-| arm | n | Hit@1 | Hit@10 | MRR | >8 kHz | >12 kHz | rolloff99 | side/mid | CLAP-style | DTW |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| full-score · YuE2-Vae | 418 | 0.557 | 0.809 | 0.646 | 0.5 % | 0.1 % | 13.8 kHz | -10.9 dB | 0.319 | 0.470 |
-| full-score · **Fugue** | 418 | 0.524 | 0.775 | 0.609 | 1.0 % | 0.2 % | 17.6 kHz | -4.8 dB | 0.304 | 0.523 |
-| no-score · YuE2-Vae | 210 | 0.000 | 0.033 | 0.022 | | | | | 0.436 | 1.686 |
-| no-score · Fugue | 210 | 0.000 | 0.033 | 0.022 | | | | | 0.418 | 1.622 |
-| upper bound: original's own 60 s excerpt | 210 | 0.819 | 0.933 | 0.861 | | | | | | |
+Several intervention surfaces are relevant to this perspective. Representation engineering [7] can manipulate intermediate activations. LoRA [8] learns low-rank changes to effective weight transformations. Inference orchestration changes prompts, plans, execution, or selection around a model. Fugue instead learns the representation supplied at a module boundary. These are complementary sites for intervention with different access and training requirements; here we evaluate the learned external interface.
 
-*Table 3. ood216 cover benchmark. Spectral columns: fraction of energy above 8 / 12 kHz, 99 % spectral roll-off (Hz),
-side/mid ratio (dB). CLAP-style: cosine to the target style text. DTW: re-transcription interval distance to the input
-score (instrumental voice).*
-
-**Identity.** Paired over the 418 shared latents, 239 pairs retrieve the source at the identical rank; 63 rank
-higher through Fugue and 116 through YuE2-Vae. Hit@1 differs by -0.033 (paired bootstrap 95 % CI [-0.060, -0.010]). The
-loss is concentrated where YuE2's own decode is already marginal: among latents YuE2-Vae retrieves at rank 1, Fugue still
-does 91.0 % of the time; among those YuE2-Vae ranks beyond 10, neither renderer recovers rank 1. The no-score control
-is at chance for both, confirming the retriever measures score-borne identity. We read the residual as the information
-cost of a lossy map (held-out R² 0.67, §4.3): the 64-d latent carries the song, the adapter transmits ~94 % of what
-the retriever can use, and for a style-transfer system a difference of this size sits inside seed variance.
-
-**Quality.** Every spectral measure flips in Fugue's favour on 99.3 % of pairs: energy above 12 kHz 3.1×,
-99 % roll-off +3.8 kHz, stereo width +6.1 dB — from a VAE-like −11 dB to the −5 to −6 dB of the reference
-recordings. Style adherence (CLAP) and score following (DTW) are tied (median paired differences -0.019, +0.000).
-Audiobox-Aesthetics again prefers the smoother YuE2-Vae output (PQ -0.28), consistent with §5.4.
+The engineering question is how to make a requested change while keeping the receiver in a regime where it behaves reliably. Here that question leads to a native conditioning target, temporal alignment, channel normalization, and input augmentation. Extending this to direct `c25` steering is a future experiment: small interventions may have little effect, while large ones may disrupt rendering. A useful next test would sweep intervention strength while tracking source identity, the requested style change, and audible artifacts.
 
 ## 6. Related work
 
-Foley Control [4] freezes a text-to-audio DiT and trains only an adapter to admit a video encoder; Fugue is the same
-shape with a symbolic music LM in the encoder's place. Freeze-Omni [5] and DITTO-TTS [6] bridge frozen LLM states to
-speech decoders; DIFFA [7] proposes two-stage semantic/acoustic adapters. "Where does the sound go?" [8] warns that thin
-adapters lose acoustics — our linear ceiling of 0.38 R² and the 0.67 reached by the Transformer adapter quantify that
-warning. ALAS [9] stresses layer choice; here the interface is a VAE latent rather than an LM layer, and the analogous
-choice — YuE2 latent vs. MM3's own DAV latent — favours YuE2's (Table 2). SongEcho and ACE-Step 1.5 are the open cover
-baselines on the YuE2 card (Hit@1 48.4 % and 2.4 %).
+**Score-conditioned music generation.** YuE2 [1] supplies the score-reading and generation capability used by Fugue. MM3 [2] supplies the acoustic renderer. The contribution is their composition and its training recipe, isolated by the local paired-decoder study.
+
+**Frozen-model composition.** Foley Control [4] connects frozen video embeddings to a frozen text-to-audio DiT through added cross-attention, using video to condition sound. Fugue instead predicts the renderer's existing conditioning representation from another music generator's acoustic latent, with supervision recovered from the renderer's own generations. Freeze-Omni [5] likewise shows that speech interfaces can be learned around a frozen language model, using speech/text supervision. Fugue's bridge does not require additional examples of the target original-to-cover transformation.
+
+**Representation and readout.** *Where Does the Sound Go?* [6] finds that acoustic information can remain recoverable in audio-conditioned LLM representations even when downstream answers fail to use it, implicating readout alignment. This motivates distinguishing information available in a representation from behavior expressed by a receiver. RepE [7] and LoRA [8] provide related but distinct intervention mechanisms discussed in Section 5.
 
 ## 7. Limitations and next steps
 
-The adapter is trained only on MM3's generations; real-song latents are out of distribution and the timbre drift in
-§5.4 is the visible cost. Vocals pass through but PER was not measured. The benchmark uses a 210-song database rather
-than SHS100K's 10,545 and one seed rather than two. We do not plan to chase the residual retrieval gap: an R² 0.67 map has a
-finite channel capacity, the retriever is already at 94 % of its YuE2-Vae reading, and for a style-transfer system
-that difference is not distinguishable from seed variance in either direction. Next: WildSongBench, an SHS100K subset,
-and representation-engineering steering in the `c25` space (MM3's existing steering axes are linear images under `proj`,
-so they transfer at inference time without retraining), together with DiT-side control.
+The benchmark uses a 210-recording gallery, one YuE2 seed, instrumental 60-second generations, and a limited source catalogue. Vocal intelligibility, listener preference, long-form consistency, and generalization across broader genres need dedicated evaluation. The adapter is fitted to MM3-generated audio encodings, while inference uses YuE2-generated latents. Some development examples shift timbre toward MM3's rendering preferences.
+
+The present interface controls whole mixed-audio generation through the supplied score and style prompt. It does not guarantee an unchanged selected stem, exact note copying, or independent edits of vocal and instrumental lines. Larger-gallery cover evaluation, multi-listener comparisons, and controlled conditioning-space interventions are the next steps.
+
+## Appendix A. Direct score-conditioning attempts on MM3
+
+Before building the graft, we attempted text-prefix, token-prefix, and in-stream conditioning routes on MM3. The teacher-forcing diagnostic is `d_spec = CE(other-score) - CE(true-score)`: larger positive values indicate that the true score helps predict the audio codes.
+
+| Experiment | Conditioning route | d_spec | Positive paired cases |
+|---|---|---:|---:|
+| r1 / r2 | ABC text prefix | approximately 0 | not tabulated |
+| Stage A | Codec-token prefix | approximately 0 | not tabulated |
+| r3 | In-stream and prefix | +0.0003 | 26/48 |
+| r4 | Plan loss, condition dropout, tempo retained | +0.0025 | 18/24 |
+| YuE2 control | ABC text prefix | +0.340 | 24/24 |
+
+In r4, ABC-writing loss fell from 23.1 to 0.49 without a comparable increase in score-conditioned audio prediction. Within the tested settings, learning to produce ABC did not translate into useful score conditioning for audio prediction. These runs motivated reusing YuE2's existing capability.
+
+## Appendix B. Native condition and reproducibility
+
+MM3's `ConditionEncoder` forms a softmax-weighted sum of the LM hidden state and seven RVQ-depth hidden states, applies a learned scalar, and projects with a kernel-3 convolution from 4096 to 2048 channels. The measured mixture coefficients are approximately `[0.906, 0.013, 0.013, 0.013, 0.014, 0.014, 0.014, 0.014]`, and the scalar is 0.0685. Projection and normalization elsewhere in the model prevent interpreting that scalar alone as the strength of conditioning.
+
+The condition rate is `24000/960 = 25` Hz; the acoustic latent rate is `44100/512 = 86.1328125` Hz. The nominal upsampling ratio is `441/128 = 3.4453125`, with integer output lengths per chunk. These are representation frame rates, not bounds on waveform frequency content.
+
+The released [summary](../research/eval_summary.json) and [per-output records](../research/eval_per_item.json) support Tables 1-2 and Figures 3-4. [The figure script](figures/render_figures.py) validates the summary against those records, derives the paired counts, and exports SVG and PNG. The development analyses in Tables 3-4 are documented in the [historical lab notebook](../research/SCION.md). The [sample index](../samples/README.md) identifies the preview audio and generation settings.
 
 ## References
 
-[1] YuE2-3B model card, M-A-P, 2026. [2] MiniMax-Music3, MiniMax, 2026. [3] Araz et al., Discogs-VI / Discogs-VINet,
-ISMIR 2024. [4] Foley Control, arXiv:2510.21581. [5] Freeze-Omni, arXiv:2411.00774. [6] DITTO-TTS, ICLR 2025.
-[7] DIFFA, arXiv:2507.18452. [8] Where Does the Sound Go?, arXiv:2609.05871. [9] ALAS, arXiv:2505.19937.
+[1] M-A-P. *YuE2-3B*. Model card and inference implementation, 2026. `m-a-p/YuE2-3B` on Hugging Face.
+
+[2] MiniMax. *MiniMax-Music3*. Model release, 2026. `MiniMaxAI/MiniMax-Music3` on Hugging Face.
+
+[3] R. Oguz Araz, Xavier Serra, and Dmitry Bogdanov. *Discogs-VI: A Musical Version Identification Dataset Based on Public Editorial Metadata*. ISMIR, 2024. arXiv:2410.17400.
+
+[4] Ciara Rowles et al. *Foley Control: Aligning a Frozen Latent Text-to-Audio Model to Video*. 2025. arXiv:2510.21581.
+
+[5] Xiong Wang et al. *Freeze-Omni: A Smart and Low Latency Speech-to-speech Dialogue Model with Frozen LLM*. 2024. arXiv:2411.00774.
+
+[6] Song-ha Jo et al. *Where Does the Sound Go? Tracing Acoustic Information Loss in Audio-Conditioned LLMs*. 2026. arXiv:2609.05871.
+
+[7] Andy Zou et al. *Representation Engineering: A Top-Down Approach to AI Transparency*. 2023. arXiv:2310.01405.
+
+[8] Edward J. Hu et al. *LoRA: Low-Rank Adaptation of Large Language Models*. 2021. arXiv:2106.09685.
