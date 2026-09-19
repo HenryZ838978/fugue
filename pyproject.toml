@@ -1,0 +1,17 @@
+[project]
+name = "fugue-music"
+version = "0.1.0"
+description = "Graft YuE2's score-reading onto MiniMax-Music3's acoustic renderer via a 66M latent adapter"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+dependencies = [
+  "torch>=2.4", "numpy", "safetensors", "soundfile", "librosa", "huggingface_hub",
+  "transformers>=4.57", "diffusers>=0.40.0.dev0",
+]
+
+[project.scripts]
+fugue-cover = "fugue.cover:main"
+
+[tool.setuptools]
+packages = ["fugue"]
