@@ -1,0 +1,7 @@
+cff-version: 1.2.0
+title: "Fugue: Grafting a Score-Reading Music Language Model onto a Frozen High-Fidelity Diffusion Renderer"
+authors:
+  - family-names: Zhang
+    given-names: Henry
+year: 2026
+url: https://github.com/HenryZ838978/fugue

@@ -146,12 +146,19 @@ condition channels span a 35× range of scale and the DiT sees the raw scale.
 
 Full lab notebook: [`research/SCION.md`](research/SCION.md). Paper draft: [`paper/fugue.md`](paper/fugue.md).
 
+### Arena (for the demo video)
+
+`services/fugue_arena.py` is the page in the recording: upload a song, pick a style preset or type one, optionally paste
+lyrics, press *generate* — three players come back: original / YuE2 native / Fugue, plus the ABC that SheetSage2 read and a
+timing log. Presets: piano ballad, Britpop, jazz trio, synthwave, folk, orchestral, lo-fi, metal. A 60 s cover takes
+about 80 s on one 4090.
+
 ## Repository layout
 
 ```
 fugue/          minimal inference package (adapter.py, graft.py, scion.py, cover.py)
 services/       resident services, orchestration CLI, Gradio arena
-research/       everything used to build and evaluate this (training, probes, eval, SCION.md lab notebook)
+research/       everything used to build and evaluate this (training, probes, eval, SCION.md lab notebook, eval_*.json, scripts/)
 samples/        A/B mp3s
 paper/          draft
 ```
