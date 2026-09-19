@@ -744,9 +744,22 @@ yue2vae 0.28 / 0.39;noscore 两臂 0.00,中位 rank ~110/210 = 随机。→ 身�
   `services/`(路径已参数化)、`research/`(scion 全部脚本 + SCION.md)、`samples/`(4 对 A/B mp3)、`paper/fugue.md`。
 - **paper**:`paper/fugue.md` 草稿 v0.1,§5.5 表待 eval 填。
 
-### 15.4 Eval 结果
+### 15.4 Eval 结果(ood216,209 首 × 2 style × 60s,单 seed;068-slash 谱 48k token 超上下文剔除)
 
-(待填)
+| 臂 | n | Hit@1 | Hit@10 | MRR | >8k | >12k | rolloff99 | side/mid | CLAP-style | DTW |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 供谱 · YuE2-Vae | 418 | 0.557 | 0.809 | 0.646 | 0.5 % | 0.1 % | 13.8 kHz | -10.9 dB | 0.319 | 0.470 |
+| 供谱 · **Fugue v4** | 418 | 0.524 | 0.775 | 0.609 | 1.0 % | 0.2 % | 17.6 kHz | -4.8 dB | 0.304 | 0.523 |
+| 无谱 · YuE2-Vae | 210 | 0.000 | 0.033 | 0.022 | | | | | 0.436 | 1.686 |
+| 无谱 · Fugue | 210 | 0.000 | 0.033 | 0.022 | | | | | 0.418 | 1.622 |
+| 上界:原曲自身 60s 截段 | 210 | 0.819 | 0.933 | 0.861 | | | | | | |
+
+配对(同 latent,n=418):rank 完全相同 239 对,Fugue 更好 63,YuE2-Vae 更好 116;Hit@1 差 -0.033(bootstrap 95% CI [-0.060, -0.010]),
+MRR 保持 YuE2 的 94 %;YuE2 命中 rank 1 的样本里 Fugue 仍命中 91.0 %。物理音质四项 Fugue 胜率 99.3 %(>12k 能量 3.1×、
+rolloff +3.8 kHz、side/mid +6.1 dB)。CLAP-style 配对差 -0.019、回转谱 DTW 差 +0.000 —— 持平。Audiobox PQ 反向 -0.28(同 §13.11)。
+
+**口径(Henry 09-20)**:身份差 ~3% 是 R² 0.67 有损映射的信息论代价,对 gen-style 模型不构成"更差";不做 DiT 感知损失追这 3%。
+DOI 之后的自然下一步是 RepE + DiT 侧控制。
 
 
 ## Sources

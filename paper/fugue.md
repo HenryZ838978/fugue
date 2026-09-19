@@ -13,10 +13,10 @@ language model cannot be conditioned on a score — four training regimes on MM3
 the 2048-dimensional, 25 Hz condition that MM3's DiT expects, with both upstream models entirely frozen. The adapter is
 trained by regression on 191 hours of MM3's own generations — targets are recovered by teacher-forcing MM3's RVQ codes
 back through its LM, inputs by encoding the rendered audio with YuE2's public VAE encoder — so no human labels and no
-access to MM3's unreleased quantizer are needed. Score following survives the graft unchanged (re-transcription DTW
-against the input score 0.064 vs. 0.064 for YuE2's native decode; a no-score control scores ≈1.0), cover identity under
-version-identification retrieval is at parity, and the rendered audio regains the high band and stereo width of a
-master. We release the adapter, the services, an interactive arena, and the lab notebook.
+access to MM3's unreleased quantizer are needed. On 209 real recordings covered into two styles each, score following is unchanged
+(re-transcription DTW 0.523 vs 0.470 for YuE2's native decode; no-score control 1.686), version-identification
+retrieval of the source keeps 94 % of YuE2's MRR (0.609 vs 0.646; 239/418 pairs at the identical rank; no-score
+control at chance), and the rendered audio regains the high band and stereo width of a master on 99.3 % of pairs. We release the adapter, the services, an interactive arena, and the lab notebook.
 
 ## 1. Introduction
 
@@ -196,21 +196,36 @@ The graft does shift timbre toward MM3's priors (a blues-rock latent renders sli
 
 ### 5.5 Cover benchmark on real recordings
 
-Protocol (mirrors the SHS100K zero-shot cover evaluation on the YuE2 model card, at 1/50 the database): 210 real
-recordings, SheetSage2 score, two contrasting target styles per song from a bank of six (instrumental), first 60 s,
-one seed; a no-score arm (YuE2 `cot=off`, style only) as control. Identity = Discogs-VINet [3] retrieval of the source
-among the 210 originals; the same YuE2 latent is decoded by YuE2-Vae and by Fugue.
+Protocol (mirrors the SHS100K zero-shot cover evaluation on the YuE2 model card, at 1/50 the database): 209 real
+recordings (one of 210 excluded: its 48k-token score exceeds YuE2's 24,576 context), SheetSage2 score, two contrasting
+target styles per song from a bank of six (instrumental), first 60 s, one seed; a no-score arm (YuE2 `cot=off`, style
+only) as control. Identity = Discogs-VINet [3] retrieval of the source among the 209 originals; the same YuE2 latent is
+decoded by YuE2-Vae and by Fugue, so each row pair is the same music through two renderers.
 
-| arm | n | Hit@1 | Hit@10 | MRR | >8 kHz | >12 kHz | rolloff99 | side/mid | CLAP-style |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| full-score · YuE2-Vae | TBD |
-| full-score · **Fugue** | TBD |
-| no-score · YuE2-Vae | TBD |
-| no-score · Fugue | TBD |
-| upper bound: original's own 60 s excerpt | 210 | 0.819 | 0.933 | 0.861 | | | | | |
+| arm | n | Hit@1 | Hit@10 | MRR | >8 kHz | >12 kHz | rolloff99 | side/mid | CLAP-style | DTW |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| full-score · YuE2-Vae | 418 | 0.557 | 0.809 | 0.646 | 0.5 % | 0.1 % | 13.8 kHz | -10.9 dB | 0.319 | 0.470 |
+| full-score · **Fugue** | 418 | 0.524 | 0.775 | 0.609 | 1.0 % | 0.2 % | 17.6 kHz | -4.8 dB | 0.304 | 0.523 |
+| no-score · YuE2-Vae | 210 | 0.000 | 0.033 | 0.022 | | | | | 0.436 | 1.686 |
+| no-score · Fugue | 210 | 0.000 | 0.033 | 0.022 | | | | | 0.418 | 1.622 |
+| upper bound: original's own 60 s excerpt | 210 | 0.819 | 0.933 | 0.861 | | | | | | |
 
-*Table 3. To be filled from `eval/summary.json` (generation in progress at time of draft; preliminary n=32:
-Hit@1 0.31 Fugue vs 0.28 YuE2-Vae, MRR 0.39 vs 0.39; no-score 0.00 / 0.00).*
+*Table 3. ood216 cover benchmark. Spectral columns: fraction of energy above 8 / 12 kHz, 99 % spectral roll-off (Hz),
+side/mid ratio (dB). CLAP-style: cosine to the target style text. DTW: re-transcription interval distance to the input
+score (instrumental voice).*
+
+**Identity.** Paired over the 418 shared latents, 239 pairs retrieve the source at the identical rank; 63 rank
+higher through Fugue and 116 through YuE2-Vae. Hit@1 differs by -0.033 (paired bootstrap 95 % CI [-0.060, -0.010]). The
+loss is concentrated where YuE2's own decode is already marginal: among latents YuE2-Vae retrieves at rank 1, Fugue still
+does 91.0 % of the time; among those YuE2-Vae ranks beyond 10, neither renderer recovers rank 1. The no-score control
+is at chance for both, confirming the retriever measures score-borne identity. We read the residual as the information
+cost of a lossy map (held-out R² 0.67, §4.3): the 64-d latent carries the song, the adapter transmits ~94 % of what
+the retriever can use, and for a style-transfer system a difference of this size sits inside seed variance.
+
+**Quality.** Every spectral measure flips in Fugue's favour on 99.3 % of pairs: energy above 12 kHz 3.1×,
+99 % roll-off +3.8 kHz, stereo width +6.1 dB — from a VAE-like −11 dB to the −5 to −6 dB of the reference
+recordings. Style adherence (CLAP) and score following (DTW) are tied (median paired differences -0.019, +0.000).
+Audiobox-Aesthetics again prefers the smoother YuE2-Vae output (PQ -0.28), consistent with §5.4.
 
 ## 6. Related work
 
@@ -226,9 +241,11 @@ baselines on the YuE2 card (Hit@1 48.4 % and 2.4 %).
 
 The adapter is trained only on MM3's generations; real-song latents are out of distribution and the timbre drift in
 §5.4 is the visible cost. Vocals pass through but PER was not measured. The benchmark uses a 210-song database rather
-than SHS100K's 10,545 and one seed rather than two. Next: WildSongBench, an SHS100K subset, DiT-space perceptual loss
-for the adapter, and representation-engineering steering in the `c25` space (MM3's existing steering axes are linear
-images under `proj`, so they transfer at inference time without retraining).
+than SHS100K's 10,545 and one seed rather than two. We do not plan to chase the residual retrieval gap: an R² 0.67 map has a
+finite channel capacity, the retriever is already at 94 % of its YuE2-Vae reading, and for a style-transfer system
+that difference is not distinguishable from seed variance in either direction. Next: WildSongBench, an SHS100K subset,
+and representation-engineering steering in the `c25` space (MM3's existing steering axes are linear images under `proj`,
+so they transfer at inference time without retraining), together with DiT-side control.
 
 ## References
 

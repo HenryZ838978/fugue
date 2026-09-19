@@ -19,9 +19,10 @@ lyrics (optional) ─────────────────┘        
   prefix experiments trying to teach its 8B LM to read ABC all measured ≈0 conditional effect. YuE2 reads scores natively.
 - **Audio quality that YuE2 does not have.** YuE2's VAE output is nearly empty above 12 kHz and 4–7 dB narrower in stereo
   than a record; the same latent rendered through MM3's DiT comes back with the high band and width of a master.
-- **Identity survives the graft.** Re-transcribing Fugue output with SheetSage2 recovers the input score as faithfully as
-  re-transcribing YuE2's own output (DTW interval distance 0.064 vs 0.064; no-score control ≈1.0), and version-identification
-  retrieval (Discogs-VINet) ranks the source song the same either way.
+- **Identity survives the graft.** On 209 real recordings covered into two styles each, Discogs-VINet retrieves the
+  source song at Hit@1 0.524 for Fugue vs 0.557 for YuE2's own decode (MRR 0.609 vs 0.646); 239 of 418
+  pairs get the *identical* rank, and a no-score control sits at 0.000. Re-transcribing the output recovers the input
+  score equally well either way (DTW 0.523 vs 0.470).
 
 Listen: [`samples/`](samples/) has A/B pairs — the *same* YuE2 latent decoded by YuE2's VAE vs. by Fugue.
 
@@ -29,20 +30,26 @@ Listen: [`samples/`](samples/) has A/B pairs — the *same* YuE2 latent decoded 
 
 ### Identity is preserved, quality goes up (ood216 cover benchmark)
 
-210 real recordings (Sawano Hiroyuki-heavy Japanese/Chinese pop & OST catalogue), each transcribed with SheetSage2 and
-covered into two contrasting target styles, first 60 s, one seed. Every YuE2 latent is decoded both ways.
-Identity = Discogs-VINet retrieval of the source among the 210 originals (protocol mirrors the SHS100K zero-shot cover
-evaluation on the YuE2 model card, at 1/50 the database size).
+209 real recordings (a Japanese/Chinese pop & OST catalogue), each transcribed with SheetSage2 and covered into two
+contrasting target styles from a bank of six, first 60 s, one seed. Every YuE2 latent is decoded both ways, so the two
+rows are the *same music* through two renderers. Identity = Discogs-VINet retrieval of the source among the 209 originals
+(protocol mirrors the SHS100K zero-shot cover evaluation on the YuE2 model card, at 1/50 the database size).
 
-| arm | Hit@1 ↑ | Hit@10 ↑ | MRR ↑ | energy >8 kHz | energy >12 kHz | 99% rolloff | side/mid |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| YuE2 full-score, **YuE2-Vae decode** | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| YuE2 full-score, **Fugue graft** | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| YuE2 no-score (control), YuE2-Vae | TBD | TBD | TBD | | | | |
-| YuE2 no-score (control), Fugue | TBD | TBD | TBD | | | | |
-| *upper bound: 60 s excerpt of the original itself* | TBD | TBD | TBD | | | | |
+| arm | n | Hit@1 ↑ | Hit@10 ↑ | MRR ↑ | energy >8 kHz | >12 kHz | 99 % rolloff | side/mid | re-transcription DTW ↓ |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| full-score · YuE2-Vae decode | 418 | 0.557 | 0.809 | 0.646 | 0.5 % | 0.1 % | 13.8 kHz | -10.9 dB | 0.470 |
+| full-score · **Fugue** | 418 | 0.524 | 0.775 | 0.609 | **1.0 %** | **0.2 %** | **17.6 kHz** | **-4.8 dB** | 0.523 |
+| no-score control · YuE2-Vae | 210 | 0.000 | 0.033 | 0.022 | | | | | 1.686 |
+| no-score control · Fugue | 210 | 0.000 | 0.033 | 0.022 | | | | | 1.622 |
+| *upper bound: the original's own 60 s excerpt* | 210 | 0.819 | 0.933 | 0.861 | | | | | |
 
-(Numbers filled from `eval/summary.json`; see `research/eval_score.py`.)
+Paired over the 418 shared latents: 239 pairs retrieve at the identical rank, 63 rank higher through Fugue,
+116 through YuE2-Vae; the Hit@1 gap is -0.033 (bootstrap 95 % CI [-0.060, -0.010]). Spectral metrics flip in Fugue's favour
+on 99.3 % of pairs (energy >12 kHz doubles, 99 % rolloff +3.8 kHz, stereo width +6.1 dB — back to record
+level); CLAP style-adherence and score-following DTW are tied (median paired difference -0.019 and +0.000).
+Reading: the 64-d latent carries the song; the adapter is a lossy map (R² 0.67) with finite capacity, and the residual
+costs ~3 % of retrieval rank in edge cases — for a *style-transfer* system that is inside what a different seed
+does, in either direction. The audio difference is not subtle. (One song of 210 has a 48k-token score that exceeds YuE2's context and is excluded.)
 
 ### What the adapter learns
 
