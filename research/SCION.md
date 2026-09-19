@@ -641,7 +641,7 @@ YuE2 VAE 输出 **12k 以上几乎为空、立体声宽度比正常唱片窄 4�
 ## 14. 配方锁定(2026-09-20)—— Fugue 成了
 
 Henry 耳判定案:`s-ave.piano.s0.v4.graft`(真曲 s-AVE → SheetSage2 谱 → YuE2 换 style → v4 嫁接)**风格完全 follow prompt、
-旋律听不出错、音质远超 YuE2**;`s-ave.britpop.s0.yue2vae` 亦过关。cover 能力 > MM3(MM3 读不进谱,r1–r4 全零),音质 > YuE2。
+旋律听不出错、音质远超 YuE2**;`s-ave.britpop.s0.v4.graft` 同样过关(Henry 09-20 更正:两首最佳都是 v4 嫁接版,非 YuE2-Vae 版)。cover 能力 > MM3(MM3 读不进谱,r1–r4 全零),音质 > YuE2。
 
 ### 14.1 冻结件
 
@@ -707,6 +707,46 @@ YuE2 卡片给了现成的比较框架,而且 **MM3 在 WildSongBench 表里、�
 - 但有一个**几乎免费、不碰冻结件的探针**可与 eval 并行:MM3 已有的 steering 轴(selfdistill/v2/axes_library.npz)住在 LM hidden 空间,
   c25 = proj(layer_scale · w₀ · hidden) 是线性映射,所以 **hidden 空间的轴可直接投到 c25 空间**,在 graft_decode 里加 `c_pred + α·proj(axis)`,
   纯推理时干预。若一天内能看到 CLAP 探针按 α 单调移动,就作为论文的一个 section;否则留给第二轮系统做(含在 YuE2 latent 空间找轴)。
+
+
+## 15. 收尾(2026-09-20 下午)—— infra / eval / 三件套 / arena
+
+### 15.1 Infra:两个常驻服务 + CLI + Arena(单卡)
+
+| 组件 | env | 端口 | 显存 | 文件 |
+|---|---|---|---|---|
+| 服务 A:SheetSage2 转谱 + YuE2 AR/NAR + YuE2-Vae 解码 | graphtokenizer | 8650(GPU7)/ 8660(GPU6) | 9.8 GB | `fugue_yue2_service.py` |
+| 服务 B:adapter v4 + MM3 DiT + vocoder | mm3 | 8651 / 8661 | 4.9 GB | `fugue_graft_service.py` |
+| 编排 CLI | mm3 | — | — | `fugue_cover.py --audio x.flac --style "…" [--lyrics] [--seconds 0]` |
+| Arena(Gradio 6) | graphtokenizer | 7877 | — | `fugue_arena.py`;`run_arena.sh`;cloudflared 隧道见 `cf_arena.log`(从本地访问不稳,内网 10.158.0.7:7877 稳) |
+
+`run_services.sh`(`GPU=6 PA=8660 PB=8661` 可起第二组)。30s 片段端到端 50s(转谱 5 + AR 14 + NAR 4 + graft 22);
+**整曲 4:37 跑通**:AR 54s + NAR 23s + graft 118s ≈ 3.3 min(`covers/s-ave.full.piano.*`,本地 listen/ 有 mp3)。
+两个坑已修:① adapter 全长 attention 在 6926 帧 OOM → `predict_c25` 分块(win 768 + pad 128,更贴训练分布);
+② 服务 A 转谱后 `torch.cuda.empty_cache()`,否则 SheetSage2 峰值显存留在 cache 里挤掉服务 B。
+
+### 15.2 Eval(ood216 协议,对齐 YuE2 卡片的 SHS100K 表)
+
+`eval_gen.py`:210 首真曲(有 SheetSage2 谱)× 2 目标 style(6 选 2,器乐)× 前 60s,三臂 fullscore(YuE2-Vae 解码 / v4 嫁接,同 latent)
++ noscore 对照(cot=off,只 style A);双卡 40s/条,630 条 ≈ 3.5h。`eval_score.py`:Discogs-VINet 身份检索(权重经 ghproxy 拉到
+`/cache/zhangjing/models/discogs-vinet`,`vinet_embed.py` 不依赖 essentia、键名 features.*→front_end.* 映射,strict 加载)、
+CLAP 风格、物理音质量、Audiobox(参考)、SheetSage2 回转谱 DTW。`run_eval_score.sh` 排队自动跑。
+**上界**:原曲自身 60s 截段检索 Hit@1 0.819 / MRR 0.861(n=210)。**早期读数(n=32)**:fullscore graft Hit@1 0.31 / MRR 0.39,
+yue2vae 0.28 / 0.39;noscore 两臂 0.00,中位 rank ~110/210 = 随机。→ 身份 ≈ YuE2,与预期一致。最终表填 §15.4。
+
+### 15.3 三件套
+
+- **ckpt**:`ckpt/scion-v4-20260920/adapter.safetensors`(fp32,266MB,md5 3c2c1f8f…)+ `stats.npz` + `config.json`,经 MCP base64 分片
+  (3MB×85 片,4 片/次)搬到本地 `Fugue/release/hf/fugue-scion-v4/`,md5 全对。cloudflared 隧道大文件不稳,弃用。
+  HF 上传待 Henry 本地 `hf auth login` 后:`hf upload HenryZ838978/fugue-scion-v4 release/hf/fugue-scion-v4 .`(model card 已写)。
+- **repo**:`Fugue/release/fugue/` → **github.com/HenryZ838978/fugue(private,明天翻 public)**。结构:`fugue/`(最小推理包:
+  adapter.py / graft.py / scion.py / cover.py,路径走 env 或 HF id;在服务器上验证与研究脚本逐元素一致,wav max|Δ| 2e-5)、
+  `services/`(路径已参数化)、`research/`(scion 全部脚本 + SCION.md)、`samples/`(4 对 A/B mp3)、`paper/fugue.md`。
+- **paper**:`paper/fugue.md` 草稿 v0.1,§5.5 表待 eval 填。
+
+### 15.4 Eval 结果
+
+(待填)
 
 
 ## Sources
