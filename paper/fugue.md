@@ -1,18 +1,18 @@
-# Fugue: High-Fidelity Music Covers by Grafting Frozen Generators
+# Fugue: Score-Conditioned Music Covers by Grafting Frozen Generators
 
 **Henry Zhang**
 
-*Draft v0.2. Implementation and experiment assistance: Claude (Fable 5).*
+*Draft v0.2.*
 
 ## Abstract
 
-A useful music cover must remain recognizable as the source song while adopting a different arrangement and production style. Fugue combines YuE2-3B's score-conditioned generation with MiniMax-Music3's diffusion-based acoustic renderer, without updating either pretrained model. A 66.6M-parameter adapter maps YuE2's acoustic latents into the renderer's existing conditioning interface. The adapter requires no additional original/cover pairs or human annotations: its inputs and targets are constructed from the audio and stored codes of MM3's own generations. On 209 real songs covered into two target styles each, Fugue achieves source-song retrieval MRR 0.609 versus 0.646 for YuE2's native decoder; a style-only control yields 0.022. Across the same 418 generated latents, median spectral rolloff rises from 13.8 to 17.6 kHz and stereo side/mid power from -10.9 to -4.8 dB. These acoustic changes accompany the author's listening preference for the grafted renderer. We release the inference package, adapter, evaluation records, and figure-generation code. Fugue demonstrates that score-conditioned behavior can be added to a frozen renderer by learning an external interface from self-generated data.
+A useful music cover must remain recognizable as the source song while adopting a different arrangement and production style. Fugue combines YuE2-3B's score-conditioned generation with MiniMax-Music3's diffusion-based acoustic renderer, without updating either pretrained model. A 66.6M-parameter adapter maps YuE2's acoustic latents into the renderer's existing conditioning interface. The adapter requires no additional original/cover pairs or human annotations: its inputs and targets are constructed from the audio and stored codes of MM3's own generations. On 209 real songs covered into two target styles each, the current version, Fugue v4, achieves source-song retrieval MRR 0.609 versus 0.646 for YuE2's native decoder; a style-only control yields 0.022. Across the same 418 generated latents, median spectral rolloff rises from 13.8 to 17.6 kHz and stereo side/mid power from -10.9 to -4.8 dB. These measurements describe increased high-frequency content and a wider stereo image from MM3's pretrained DiT-based rendering path, rather than an overall quality ranking. We release the adapter, inference package, resident services, cover frontend, evaluation records, and figure-generation code. Fugue provides a practical alternative for score-conditioned covers by combining a learned cross-model interface with end-to-end deployment and evaluation infrastructure.
 
 ## 1. Introduction
 
 Cover generation starts from musical material that a user already wants to keep. The task is to change its setting: for example, turn a vocal recording into a piano arrangement, or realize the same song as guitar-driven rock. This makes identity preservation, style control, and acoustic rendering jointly important. A convincing output in the requested genre is not a successful cover if it has lost the intended song.
 
-YuE2-3B [1] provides score-conditioned music generation, including ABC input and a non-autoregressive acoustic stage. MiniMax-Music3 (MM3) [2] provides a diffusion transformer and stereo vocoder whose rendering quality motivated this work. We use the former to generate score-conditioned musical content and the latter to render it. The models are connected before waveform decoding through a learned latent mapping.
+YuE2-3B [1] provides score-conditioned music generation, including ABC input and a non-autoregressive acoustic stage. MiniMax-Music3 (MM3) [2] supplies the pretrained diffusion transformer and stereo vocoder used for Fugue's acoustic rendering. We use the former to generate score-conditioned musical content and the latter to render it. The models are connected before waveform decoding through a learned latent mapping. The resulting system offers another route to music covers, with more high-frequency content and a wider stereo image than the native decoder in the paired evaluation.
 
 ![Fugue inference pipeline and its native-decoder reference branch.](figures/cover-workflow.png)
 
@@ -21,6 +21,8 @@ YuE2-3B [1] provides score-conditioned music generation, including ABC input and
 The name **Fugue** draws on the return of a recognizable subject through interweaving musical voices. It expresses a design goal: keep continuity in a vocal or instrumental line while allowing its surroundings to change and respond. The current system realizes this through score-conditioned generation of mixed audio.
 
 The central contribution is **a way to compose existing capabilities without additional cover-pair supervision**. Training examples are constructed from MM3 generations with stored RVQ codes; no recording has to be paired with a human or model-produced cover. We also identify a usable cross-model interface, correct the time-axis mismatch introduced by chunked rendering, and evaluate the resulting system on real-song covers. The main experiment appears in Section 3; the unsuccessful attempts to train score conditioning directly into MM3 are retained in Appendix A.
+
+A second contribution is **the infrastructure that makes this composition usable and inspectable**: a training-pair extraction pipeline, a packaged adapter with normalization statistics, separate resident services that can share one GPU, a cover CLI and frontend, long-form chunked inference, and resumable paired evaluation. Section 4.3 describes these components and distinguishes Fugue's integration work from the capabilities inherited from the frozen models.
 
 ## 2. Method
 
@@ -108,13 +110,17 @@ This is a local paired-renderer evaluation, not a reproduction of the full SHS10
 
 *Table 1. Identity and style on the local cover benchmark. Both conditions use YuE2 generation and differ in whether the source score is supplied.*
 
-Fugue retains 94% of the native decoder's MRR. Its Hit@1 is lower by 3.35 percentage points. Across shared latents, source rank is unchanged in 239 pairs, higher with Fugue in 63, and higher with YuE2 native in 116. The median paired CLAP difference is -0.019. The graft therefore preserves much of the source-identification capability while changing the acoustic rendering.
+The current version, Fugue v4, retains 94% of the native decoder's MRR. Its Hit@1 is lower by 3.35 percentage points. Across shared latents, source rank is unchanged in 239 pairs, higher with Fugue in 63, and higher with YuE2 native in 116. The median paired CLAP difference is -0.019. These results characterize the current adapter and rendering configuration: much of the source-identification capability is retained, with a measurable retrieval gap.
+
+Several factors may contribute to this gap. Finite adapter regression accuracy can alter song-specific cues, and training on encoded MM3 audio does not eliminate the distribution shift to NAR-generated YuE2 latents. The loss fits `c25` rather than directly optimizing source retrieval. Changes in timbre and spatial presentation introduced by the renderer may also change the retrieval embedding. Because the paired decoders receive the same upstream latent, these explanations concern the adapter and rendering path, not different transcription or generation inputs. Their relative contributions have not been isolated in the current version.
 
 Re-transcription DTW medians are 0.470 for YuE2 native and 0.523 for Fugue, computed over 372 and 375 valid outputs. Across the **372 pairs valid for both decoders**, the median paired difference is 0.000. The corresponding style-only medians are 1.686 and 1.622 over 197 valid outputs each.
 
-### 3.3 Acoustic rendering and listening
+### 3.3 High-frequency content and stereo image
 
-The author preferred Fugue's rendering in informal development comparisons, particularly its high-frequency detail and stereo presentation. The release supplies same-latent A/B previews, a source-to-cover comparison in two styles, a vocal example, and one full-length example.
+The acoustic distinction measured here is increased high-frequency energy and a wider stereo image. These rendering capabilities are inherited primarily from MM3's pretrained DiT-based acoustic path: the DiT synthesizes acoustic latents and the Flow-VAE converts them to stereo waveforms. Fugue contributes the interface that lets YuE2-generated latents drive this path without retraining either component. The paired comparison measures the combined adapter/DiT/vocoder path; it does not isolate the DiT's contribution from the vocoder's.
+
+The release supplies same-latent A/B previews, a source-to-cover comparison in two styles, a vocal example, and five full-length examples: one instrumental piano cover and four vocal covers of two real recordings in two styles each, outside the benchmark catalogue. These examples expose the rendering difference for inspection; they are not a blind-listening evaluation.
 
 ![Scatter plots of four acoustic measurements, one point per shared latent, with the identity diagonal and marginal medians.](figures/acoustic-changes.png)
 
@@ -131,7 +137,7 @@ The author preferred Fugue's rendering in informal development comparisons, part
 
 The median paired differences are +3.8 kHz for rolloff and +6.1 dB for side/mid power. High-band energy is measured from the mono power spectrum. Rolloff is the median framewise frequency containing 99% of the cumulative magnitude spectrum. Stereo width is reported as `10 log10(var(L-R) / var(L+R))`, with the numerical stabilizers used in `eval_score.py`.
 
-Audiobox-Aesthetics PQ decreases by a median paired 0.278, opposite to the author's listening preference. We report both results and leave the mechanism of the disagreement open. In a separate codec round-trip case study on a real recording, YuE2 VAE achieves SI-SDR 7.7 dB and MM3 Flow-VAE 17.7 dB. This experiment measures codec reconstruction, a distinct question from producing a new arrangement.
+Audiobox-Aesthetics PQ decreases by a median paired 0.278 in the current version. We report this alongside the spectral and stereo measurements: increased high-frequency content and stereo width are not, by themselves, claims of higher perceptual quality. In a separate codec round-trip case study on a real recording, YuE2 VAE achieves SI-SDR 7.7 dB and MM3 Flow-VAE 17.7 dB. This experiment measures codec reconstruction, a distinct question from producing a new arrangement.
 
 ## 4. Interface analysis
 
@@ -168,17 +174,27 @@ This case shows tolerance to moderate unstructured condition error while remaini
 
 The native condition projection and frame rates are documented in Appendix B.
 
-### 4.3 Runtime and long-form example
+### 4.3 Infrastructure contribution
+
+**Training and release pipeline.** Fugue provides the tooling to recover MM3 conditions from saved generation codes, encode the corresponding audio with YuE2, align the two time axes, compute channel statistics, and train the adapter. The inference package loads the adapter weights, normalization statistics, and chunking configuration as one release unit. This packages the learned interface without requiring MM3's LM or depth decoder on the cover-generation path. The research scripts retain laboratory-specific paths; the inference package exposes configurable model locations.
+
+**Resident services and orchestration.** The [service implementation](../services/) separates transcription/YuE2 generation from adapter/MM3 rendering, allowing the two dependency environments to remain separate while their models share a GPU. HTTP requests coordinate the stages, and latent files on a shared filesystem carry the intermediate representation. Models remain resident across requests, and the transcription service releases unused CUDA cache after transcription to leave room for the rendering service. The service workflow records requests, intermediate latents, stage timings, and outputs, with separate generation and rendering seeds.
+
+**Long-form inference and user interfaces.** The [inference package](../fugue/) implements context-padded adapter windows and connects their output to MM3's native chunked denoising and waveform-stitching procedure. The contribution is making the learned interface work with this existing rendering schedule, not introducing a new DiT or vocoder. A single-process CLI accepts recordings or ABC scores, target styles, and optional lyrics; a service-based CLI and the Arena frontend expose the same cover workflow. The released Arena displays labeled source, YuE2-native, and Fugue outputs for comparison, rather than conducting a blind-listening study.
+
+**Paired evaluation and auditability.** The [benchmark driver](../research/eval_gen.py) shards generation jobs, skips completed items on reruns, and sends each generated latent to both decoders. Per-output records preserve the source/style assignment and generation metadata. The released scoring and figure-generation tools connect these records to the aggregate tables and paired counts. This infrastructure supports inspection and subsequent evaluation extensions without conflating different upstream generations with renderer changes.
+
+### 4.4 Runtime and long-form example
 
 The resident transcription/YuE2 and graft/rendering services occupy approximately 9.8 GB and 4.9 GB on the reference 24 GB GPU. A 30-second cover takes about 50 seconds end to end. A 4:37 piano output was generated with AR, NAR, and acoustic-rendering times of 54, 23, and 118 seconds. These individual runs use resident models; the long example exercises the chunked inference path.
 
-## 5. Discussion: control after pretraining
+## 5. Discussion: a practical alternative
 
 A pretrained generator's default inference pipeline need not be its final interface. Fugue is an instance of **external adaptation after pretraining**: the learned bridge changes which upstream musical representations can drive a renderer, while the original weights remain fixed. The additional cover capability belongs to the composed system, not to a newly score-trained MM3 backbone.
 
-Several intervention surfaces are relevant to this perspective. Representation engineering [7] can manipulate intermediate activations. LoRA [8] learns low-rank changes to effective weight transformations. Inference orchestration changes prompts, plans, execution, or selection around a model. Fugue instead learns the representation supplied at a module boundary. These are complementary sites for intervention with different access and training requirements; here we evaluate the learned external interface.
+The intended role is **a practical alternative for score-conditioned covers with increased high-frequency content and a wider stereo image**. YuE2 supplies score-conditioned musical generation; MM3 supplies the pretrained DiT-based rendering capabilities. Fugue's contribution is the learned connection, its self-generated supervision, and the infrastructure for running and evaluating the composed system. This separates the value of the integrated cover workflow from a claim that Fugue introduced those upstream capabilities.
 
-The engineering question is how to make a requested change while keeping the receiver in a regime where it behaves reliably. Here that question leads to a native conditioning target, temporal alignment, channel normalization, and input augmentation. Extending this to direct `c25` steering is a future experiment: small interventions may have little effect, while large ones may disrupt rendering. A useful next test would sweep intervention strength while tracking source identity, the requested style change, and audible artifacts.
+The engineering question is how to connect these capabilities while keeping the renderer within a useful conditioning regime. Here that leads to a native conditioning target, temporal alignment, channel normalization, and input augmentation. The current version's retrieval gap identifies an interface-level limitation to investigate, rather than establishing an unavoidable cost of frozen-model composition. This report evaluates that version and does not establish an overall ranking against other cover systems.
 
 ## 6. Related work
 
@@ -186,13 +202,21 @@ The engineering question is how to make a requested change while keeping the rec
 
 **Frozen-model composition.** Foley Control [4] connects frozen video embeddings to a frozen text-to-audio DiT through added cross-attention, using video to condition sound. Fugue instead predicts the renderer's existing conditioning representation from another music generator's acoustic latent, with supervision recovered from the renderer's own generations. Freeze-Omni [5] likewise shows that speech interfaces can be learned around a frozen language model, using speech/text supervision. Fugue's bridge does not require additional examples of the target original-to-cover transformation.
 
-**Representation and readout.** *Where Does the Sound Go?* [6] finds that acoustic information can remain recoverable in audio-conditioned LLM representations even when downstream answers fail to use it, implicating readout alignment. This motivates distinguishing information available in a representation from behavior expressed by a receiver. RepE [7] and LoRA [8] provide related but distinct intervention mechanisms discussed in Section 5.
+**Representation and readout.** *Where Does the Sound Go?* [6] finds that acoustic information can remain recoverable in audio-conditioned LLM representations even when downstream answers fail to use it, implicating readout alignment. This motivates distinguishing information available in a representation from behavior expressed by a receiver. Fugue tests a learned interface between frozen modules; its reported results concern this interface, not direct activation steering.
 
-## 7. Limitations and next steps
+## 7. Current-version limitations and post-release V2
 
-The benchmark uses a 210-recording gallery, one YuE2 seed, instrumental 60-second generations, and a limited source catalogue. Vocal intelligibility, listener preference, long-form consistency, and generalization across broader genres need dedicated evaluation. The adapter is fitted to MM3-generated audio encodings, while inference uses YuE2-generated latents. Some development examples shift timbre toward MM3's rendering preferences.
+The current Fugue v4 benchmark uses a 210-recording gallery, one YuE2 seed, instrumental 60-second generations, and a limited source catalogue. Vocal intelligibility, listener preference, long-form consistency, and generalization across broader genres need dedicated evaluation. The adapter is fitted to MM3-generated audio encodings, while inference uses YuE2-generated latents. Some development examples exhibit renderer-specific timbre shifts. The retrieval and PQ results describe this version's limitations alongside its increased high-frequency content and stereo width.
 
-The present interface controls whole mixed-audio generation through the supplied score and style prompt. It does not guarantee an unchanged selected stem, exact note copying, or independent edits of vocal and instrumental lines. Larger-gallery cover evaluation, multi-listener comparisons, and controlled conditioning-space interventions are the next steps.
+The present interface controls whole mixed-audio generation through the supplied score and style prompt. It does not guarantee an unchanged selected stem, exact note copying, or independent edits of vocal and instrumental lines.
+
+The initial release makes the system and its current evaluation available first. A post-release **V2 of this report** is planned to add the following studies; this report revision should not be confused with the earlier v2 adapter run in Table 3:
+
+1. **Arena blind listening:** randomized, loudness-matched comparisons with independent listeners, separating audio quality, source-song recognizability, target-style fit, and overall preference.
+2. **Cover-generation baselines:** comparisons with additional cover systems under matched source songs, target styles, and generation budgets, with expanded retrieval galleries and explicit reporting of failed outputs.
+3. **Controlled subset ablations:** tests of temporal alignment, input noise, and loss weighting on the same held-out cover subset, using multiple seeds to examine the current retrieval gap and rendering changes.
+
+These are planned extensions after release, not completed experiments or results claimed in the current version.
 
 ## Appendix A. Direct score-conditioning attempts on MM3
 
@@ -229,7 +253,3 @@ The released [summary](../research/eval_summary.json) and [per-output records](.
 [5] Xiong Wang et al. *Freeze-Omni: A Smart and Low Latency Speech-to-speech Dialogue Model with Frozen LLM*. 2024. arXiv:2411.00774.
 
 [6] Song-ha Jo et al. *Where Does the Sound Go? Tracing Acoustic Information Loss in Audio-Conditioned LLMs*. 2026. arXiv:2609.05871.
-
-[7] Andy Zou et al. *Representation Engineering: A Top-Down Approach to AI Transparency*. 2023. arXiv:2310.01405.
-
-[8] Edward J. Hu et al. *LoRA: Low-Rank Adaptation of Large Language Models*. 2021. arXiv:2106.09685.
