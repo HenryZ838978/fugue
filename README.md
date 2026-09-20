@@ -1,22 +1,29 @@
-# Fugue
+<p align="center">
+  <img src="assets/logo.png" alt="Fugue" width="190">
+</p>
 
-**High-fidelity music covers, in the style you choose.**
+<h1 align="center">Fugue</h1>
+
+<p align="center"><b>High-fidelity music covers, in the style you choose.</b></p>
 
 Fugue turns a recording or an ABC score into a new arrangement while keeping the song recognizable. It combines YuE2's score-conditioned generation with MiniMax-Music3's acoustic renderer through a learned adapter. Both base models stay frozen.
 
 ## Listen first
 
-Start with one song in two settings. These are covers of **s-AVE**, by SawanoHiroyuki[nZk] with Aimer:
+Four full-length covers of two real recordings, sung in the original words. Each is one uninterrupted generation from the song's SheetSage2 transcription, its lyrics, and a style prompt — no splicing, no truncation, about three minutes of wall clock per track on a single RTX 4090.
 
-| Source | Piano and strings | Britpop guitar rock |
+| Song | Contemporary R&B | Britpop |
 |---|---|---|
-| [Original excerpt](samples/source_sAVE_excerpt.mp3) | [Fugue cover](samples/cover_sAVE_piano_fugue.mp3) | [Fugue cover](samples/cover_sAVE_britpop_fugue.mp3) |
+| **Y.M.C.A.**, Village People | [4:43 cover](samples/showcase/cover_ymca_rnb_fugue.mp3) | [4:44 cover](samples/showcase/cover_ymca_britpop_fugue.mp3) |
+| **大东北我的家乡** / *Da Dong Bei, My Hometown*, He Yu | [4:06 cover](samples/showcase/cover_dadongbei_rnb_fugue.mp3) | [4:03 cover](samples/showcase/cover_dadongbei_britpop_fugue.mp3) |
 
-The piano prompt is `intimate solo piano ballad with soft strings, 75 BPM, A minor, cinematic, instrumental`; the guitar prompt is `1990s Britpop guitar rock, 75 BPM, A minor, driving drums, instrumental`.
+Both covers of a song share one transcription and one lyric sheet; the style prompt and the YuE2 seed are the only variables. GitHub serves audio files as links rather than players, so these download or open in a new tab. Prompts, seeds, and measurements are in [`samples/README.md`](samples/README.md).
 
-For a longer listen: [the full 4:37 piano cover](samples/cover_sAVE_piano_full_fugue.mp3). For a vocal example: [To Know You, with supplied lyrics](samples/cover_toKnowYou_britpop_vocal_fugue.mp3).
+![Mel spectrograms of forty seconds from each song, shown three ways: the source recording, the YuE2-native decode of the generated latent, and the Fugue render of that same latent.](paper/figures/real-song-covers.png)
 
-To hear the contribution of the renderer, compare **the same YuE2 latent** decoded both ways:
+### The same latent, two decoders
+
+Fugue replaces YuE2's own VAE decoder with a learned adapter into MiniMax-Music3. To hear what the renderer contributes, compare **one generated latent** decoded both ways:
 
 | Arrangement | YuE2 native | Fugue |
 |---|---|---|
@@ -24,7 +31,7 @@ To hear the contribution of the renderer, compare **the same YuE2 latent** decod
 | s-AVE, Britpop | [Listen](samples/cover_sAVE_britpop_yue2_native.mp3) | [Listen](samples/cover_sAVE_britpop_fugue.mp3) |
 | To Know You, Britpop with vocals | [Listen](samples/cover_toKnowYou_britpop_vocal_yue2_native.mp3) | [Listen](samples/cover_toKnowYou_britpop_vocal_fugue.mp3) |
 
-These are MP3 previews, not lossless evaluation audio. [Sample details and additional pairs](samples/README.md).
+These are 30-second excerpts of **s-AVE**, by SawanoHiroyuki[nZk] with Aimer, next to its [original excerpt](samples/source_sAVE_excerpt.mp3). The piano prompt is `intimate solo piano ballad with soft strings, 75 BPM, A minor, cinematic, instrumental`; the guitar prompt is `1990s Britpop guitar rock, 75 BPM, A minor, driving drums, instrumental`. A [full 4:37 piano cover](samples/cover_sAVE_piano_full_fugue.mp3) is included as well. Every file here is an MP3 preview, not lossless evaluation audio. [Sample details and additional pairs](samples/README.md).
 
 ### Why "Fugue"?
 
@@ -127,6 +134,12 @@ The author preferred Fugue in the development listening comparisons. The measure
 
 High-frequency energy increases in 99.3% of pairs for each band, rolloff in 100%, and side/mid power in 96.9%. All four increase together in **400/418 pairs (95.7%)**.
 
+The four full-length covers behave the same way outside the benchmark, on real recordings rather than generated ones:
+
+![Time-averaged spectra of the four full-length covers, each shown against the YuE2-native decode of the same latent and against the source recording.](paper/figures/real-song-spectra.png)
+
+Above 8 kHz, Fugue sits at or above the native decode in all four. Both stay under the commercially mastered sources around 1–4 kHz; these covers carry no mastering stage, and their RMS is 3–8 dB below the originals. The curves are plotted to 16 kHz so that lossless renders and MP3 previews remain comparable, and the numbers behind them are stored in [`showcase_spectra.json`](paper/figures/showcase_spectra.json).
+
 Re-transcription interval-DTW has a median paired difference of 0.000 across **372 valid pairs**. The separate arm medians are 0.470 for YuE2 native and 0.523 for Fugue, with 372 and 375 valid outputs respectively. Audiobox-Aesthetics PQ moves in the opposite direction to the author's listening preference, with a median paired change of -0.278; the paper reports both observations.
 
 [Full protocol and paper](paper/fugue.md) · [Summary data](research/eval_summary.json) · [Per-output measurements](research/eval_per_item.json)
@@ -164,7 +177,7 @@ wav = renderer(adapter(latent), steps=30, seed=7)  # (2, samples), 44.1 kHz
 
 ## Scope
 
-The main benchmark is instrumental, uses 60-second generations and one YuE2 seed, and draws on a Japanese/Chinese pop and soundtrack catalogue. Vocal examples and one full-length output are included, but lyric intelligibility and long-form consistency have not been systematically evaluated. The model regenerates a mixed recording rather than copying a selected stem; timbre can shift toward MM3's rendering preferences.
+The main benchmark is instrumental, uses 60-second generations and one YuE2 seed, and draws on a Japanese/Chinese pop and soundtrack catalogue. The vocal and full-length examples above sit outside it: lyric intelligibility and long-form consistency are demonstrated, not measured. The model regenerates a mixed recording rather than copying a selected stem; timbre can shift toward MM3's rendering preferences.
 
 ## Repository
 
@@ -172,14 +185,15 @@ The main benchmark is instrumental, uses 60-second generations and one YuE2 seed
 |---|---|
 | `fugue/` | Minimal inference package |
 | `services/` | Resident services, orchestration CLI, and Gradio arena |
-| `samples/` | Source excerpt, cover previews, same-latent comparisons, and a full-length example |
-| `paper/` | Paper draft and shared SVG/PNG figures, including their regeneration script |
+| `samples/` | Cover previews and same-latent comparisons; `samples/showcase/` holds the four full-length covers |
+| `paper/` | Paper draft and shared SVG/PNG figures, including their regeneration scripts |
 | `research/` | Training, probes, evaluation data, launchers, and the historical lab notebook |
+| `assets/` | Project logo |
 
-The result figures are generated from the released JSON measurements. See [`paper/figures/`](paper/figures/README.md) to reproduce them. The historical [`SCION.md`](research/SCION.md) preserves the experiments and earlier interpretations; this README and the paper describe the released result.
+The result figures are generated from the released JSON measurements, and the showcase figures from the MP3s in `samples/showcase/`. See [`paper/figures/`](paper/figures/README.md) to reproduce them. The historical [`SCION.md`](research/SCION.md) preserves the experiments and earlier interpretations; this README and the paper describe the released result.
 
 ## Licenses and credits
 
 Code in this repository is Apache-2.0. The adapter weights are released under the MiniMax-Music3 terms; the upstream models remain under their respective licenses. See the model repositories before deployment.
 
-Built by Henry Zhang with Claude (Fable 5). YuE2, SheetSage2, and MERT are by M-A-P; MiniMax-Music3 is by MiniMax. Discogs-VINet is used for version-identification evaluation. Citation metadata is in [`CITATION.cff`](CITATION.cff).
+Built by Henry Zhang. YuE2, SheetSage2, and MERT are by M-A-P; MiniMax-Music3 is by MiniMax. Discogs-VINet is used for version-identification evaluation. Citation metadata is in [`CITATION.cff`](CITATION.cff).
