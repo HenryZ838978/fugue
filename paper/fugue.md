@@ -1,8 +1,6 @@
 # Fugue: Score-Conditioned Music Covers by Grafting Frozen Generators
 
-**Henry Zhang**
-
-*Draft v0.2.*
+**Jing Zhang**
 
 ## Abstract
 
@@ -139,6 +137,20 @@ The median paired differences are +3.8 kHz for rolloff and +6.1 dB for side/mid 
 
 Audiobox-Aesthetics PQ decreases by a median paired 0.278 in the current version. We report this alongside the spectral and stereo measurements: increased high-frequency content and stereo width are not, by themselves, claims of higher perceptual quality. In a separate codec round-trip case study on a real recording, YuE2 VAE achieves SI-SDR 7.7 dB and MM3 Flow-VAE 17.7 dB. This experiment measures codec reconstruction, a distinct question from producing a new arrangement.
 
+### 3.4 Full-length covers outside the benchmark
+
+![The same forty seconds of two songs, rendered three ways.](figures/real-song-covers.png)
+
+*Figure 5. Rows are the two source recordings; columns are the source, the YuE2 native decode of the generated latent, and the Fugue render of that same latent. Mel spectrograms are plotted to 16 kHz, which keeps the lossless sources and the MP3 previews comparable above 8 kHz without the MP3 encoder's own lowpass entering the picture.*
+
+![Time-averaged spectra of the four full-length covers, pooled into 1/12-octave bands.](figures/real-song-spectra.png)
+
+*Figure 6. Rows are songs, columns are target styles; each panel overlays the source recording, the YuE2 native decode, and the Fugue render of the same latent, plotted to 16 kHz. The shaded band marks 8-16 kHz. Fugue sits at or above the native decode of the same latent across these tracks; the gap is a few dB, not an order of magnitude.*
+
+The benchmark generations above are instrumental and 60 seconds long. As a separate demonstration, two real recordings outside the benchmark catalogue were covered at full length into two styles each, with vocals. SheetSage2 transcribed each source into a two-voice ABC score with chord annotations, and the lyrics were supplied as text rather than recovered by ASR. Both covers of a song reuse that one score and that one lyric sheet, so the style prompt and the YuE2 seed are the only variables; no BPM appears in the prompts, since the ABC carries its own tempo line. Each track is a single generation with no splicing, 243-284 seconds long, at 171-204 seconds of wall clock on one RTX 4090. Figures 5 and 6 show these tracks against their sources and against the native decode of the same latent.
+
+These four tracks are a qualitative demonstration and were selected by ear from a larger batch, so they should not be read as an unbiased sample of the acoustic trend in Table 2. Measured individually against their sources, they do not all move the same way: the Britpop take of Y.M.C.A. carries 0.89% of its energy above 8 kHz with a 7.6 kHz rolloff, below its own source recording, while the other three sit above theirs. The per-track rendering result is set by what the generator produced, not by a rendering path that raises high-frequency content monotonically. The sources are also commercial masters and the covers have no mastering stage, which accounts for most of the level difference visible between the curves.
+
 ## 4. Interface analysis
 
 ### 4.1 What is learned
@@ -238,7 +250,7 @@ MM3's `ConditionEncoder` forms a softmax-weighted sum of the LM hidden state and
 
 The condition rate is `24000/960 = 25` Hz; the acoustic latent rate is `44100/512 = 86.1328125` Hz. The nominal upsampling ratio is `441/128 = 3.4453125`, with integer output lengths per chunk. These are representation frame rates, not bounds on waveform frequency content.
 
-The released [summary](../research/eval_summary.json) and [per-output records](../research/eval_per_item.json) support Tables 1-2 and Figures 3-4. [The figure script](figures/render_figures.py) validates the summary against those records, derives the paired counts, and exports SVG and PNG. The development analyses in Tables 3-4 are documented in the [historical lab notebook](../research/SCION.md). The [sample index](../samples/README.md) identifies the preview audio and generation settings.
+The released [summary](../research/eval_summary.json) and [per-output records](../research/eval_per_item.json) support Tables 1-2 and Figures 3-4. [The figure script](figures/render_figures.py) validates the summary against those records, derives the paired counts, and exports SVG and PNG; [a second script](figures/render_showcase.py) draws Figures 5 and 6 from the showcase audio and its stored curves. The development analyses in Tables 3-4 are documented in the [historical lab notebook](../research/SCION.md). The [sample index](../samples/README.md) identifies the preview audio and generation settings.
 
 ## References
 

@@ -7,3 +7,4 @@ __pycache__/
 *.safetensors
 fugue_out/
 .DS_Store
+paper/tex/*.pdf
