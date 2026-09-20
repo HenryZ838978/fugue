@@ -1,13 +1,51 @@
-Apache License 2.0
+Fugue — licensing
+=================
 
-Copyright 2026 Henry Zhang
+This repository is released under two licenses, split by what the material is.
 
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
-License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0. Unless required by
-applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing
+Copyright 2026 Henry Zhang.
+
+
+Software: Apache License 2.0
+----------------------------
+
+Applies to the source code: `fugue/`, `research/`, `services/`, `pyproject.toml`,
+and the figure-rendering scripts under `paper/figures/` (`render_figures.py`,
+`render_showcase.py`).
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+these files except in compliance with the License. You may obtain a copy of the
+License at http://www.apache.org/licenses/LICENSE-2.0. Unless required by
+applicable law or agreed to in writing, software distributed under the License
+is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+either express or implied. See the License for the specific language governing
 permissions and limitations under the License.
 
-The adapter weights (distributed separately at HenryZ838978/fugue-scion-v4) are derived from MiniMax-Music3 outputs and are
-subject to the MiniMax-Music3 license terms. YuE2-3B, YuE2-Vae, SheetSage2 and MERT-v2-FullSong are copyright their authors
-(M-A-P) and are used unmodified under their respective licenses.
+
+Research materials: CC BY-NC 4.0
+--------------------------------
+
+Applies to the paper and everything that presents it: `paper/` (the PDFs, the
+Markdown sources, the LaTeX sources, and the figure images), `samples/`,
+`assets/`, and `README.md`.
+
+Licensed under the Creative Commons Attribution-NonCommercial 4.0 International
+License. You may share and adapt this material for non-commercial purposes,
+with attribution. Full terms: https://creativecommons.org/licenses/by-nc/4.0/
+
+Earlier revisions of this repository placed these materials under Apache-2.0.
+That grant is not revoked for copies already obtained under it.
+
+
+Third-party components
+----------------------
+
+The adapter weights (distributed separately at `HenryZ838978/fugue-scion-v4`)
+are derived from MiniMax-Music3 outputs and are subject to the MiniMax-Music3
+license terms. YuE2-3B, YuE2-Vae, SheetSage2 and MERT-v2-FullSong are copyright
+their authors (M-A-P) and are used unmodified under their respective licenses.
+
+The sample audio contains covers of existing recordings. The underlying musical
+works remain the property of their rights holders; the samples are published as
+a research demonstration and the license above covers only this project's own
+contribution to them.

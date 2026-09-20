@@ -142,7 +142,7 @@ Above 8 kHz, Fugue sits at or above the native decode in all four. Both stay und
 
 Re-transcription interval-DTW has a median paired difference of 0.000 across **372 valid pairs**. The separate arm medians are 0.470 for YuE2 native and 0.523 for Fugue, with 372 and 375 valid outputs respectively. Audiobox-Aesthetics PQ moves in the opposite direction to the author's listening preference, with a median paired change of -0.278; the paper reports both observations.
 
-[Full protocol and paper](paper/fugue.md) · [Summary data](research/eval_summary.json) · [Per-output measurements](research/eval_per_item.json)
+[Paper (PDF)](paper/fugue.pdf) · [中文版 PDF](paper/fugue.zh-CN.pdf) · [Markdown source](paper/fugue.md) · [Summary data](research/eval_summary.json) · [Per-output measurements](research/eval_per_item.json)
 
 ## How the graft is trained
 
@@ -157,7 +157,7 @@ Re-transcription interval-DTW has a median paired difference of 0.000 across **3
 
 The full paired corpus contains 12,837 generations, about 191 hours; the adapter uses 10,340 training songs. The released v4 adapter trained for 67 minutes on one RTX 4090 **after pair extraction**, with both upstream models frozen. Corpus generation and feature extraction are separate costs. Its held-out variance-weighted R² is 0.671.
 
-The practical result is an additional route into a pretrained renderer: new score-conditioned behavior without retraining either base model. The [paper's discussion](paper/fugue.md#5-discussion-control-after-pretraining) places this alongside activation steering, low-rank adaptation, and inference orchestration, while separating those broader directions from the evaluated graft.
+The practical result is an additional route into a pretrained renderer: new score-conditioned behavior without retraining either base model. The [paper's discussion](paper/fugue.md#5-discussion-a-practical-alternative) places this alongside activation steering, low-rank adaptation, and inference orchestration, while separating those broader directions from the evaluated graft.
 
 ### Python interface
 
@@ -186,7 +186,7 @@ The main benchmark is instrumental, uses 60-second generations and one YuE2 seed
 | `fugue/` | Minimal inference package |
 | `services/` | Resident services, orchestration CLI, and Gradio arena |
 | `samples/` | Cover previews and same-latent comparisons; `samples/showcase/` holds the four full-length covers |
-| `paper/` | Paper draft and shared SVG/PNG figures, including their regeneration scripts |
+| `paper/` | The paper in English and Chinese — PDF, Markdown, and LaTeX sources — with the shared SVG/PNG figures and their regeneration scripts |
 | `research/` | Training, probes, evaluation data, launchers, and the historical lab notebook |
 | `assets/` | Project logo |
 
@@ -194,6 +194,6 @@ The result figures are generated from the released JSON measurements, and the sh
 
 ## Licenses and credits
 
-Code in this repository is Apache-2.0. The adapter weights are released under the MiniMax-Music3 terms; the upstream models remain under their respective licenses. See the model repositories before deployment.
+This repository carries two licenses. The code — `fugue/`, `research/`, `services/`, and the figure scripts — is Apache-2.0. The research materials — the paper in `paper/`, the sample audio in `samples/`, the images in `assets/`, and this README — are CC BY-NC 4.0: share and adapt for non-commercial purposes, with attribution. The adapter weights are released under the MiniMax-Music3 terms; the upstream models remain under their respective licenses. See [`LICENSE`](LICENSE) for the full split and the model repositories before deployment.
 
 Built by Henry Zhang. YuE2, SheetSage2, and MERT are by M-A-P; MiniMax-Music3 is by MiniMax. Discogs-VINet is used for version-identification evaluation. Citation metadata is in [`CITATION.cff`](CITATION.cff).
