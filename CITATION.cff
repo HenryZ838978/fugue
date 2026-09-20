@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "Fugue: High-Fidelity Music Covers by Grafting Frozen Generators"
+title: "Fugue: Score-Conditioned Music Covers by Grafting Frozen Generators"
 authors:
   - family-names: Zhang
     given-names: Henry
